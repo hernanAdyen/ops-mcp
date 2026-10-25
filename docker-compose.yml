@@ -1,0 +1,76 @@
+# Shared settings (YAML anchors) so the app and the migrate step can't drift apart.
+x-app-build: &app_build
+  context: .
+  args:
+    # Python 3.13 image. Blank = the public image; on work laptops set the internal registry's in .env.
+    PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+    # Package index uv installs from. Blank = public PyPI; on work laptops set the internal mirror in .env.
+    UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
+
+x-db-env: &db_env
+  # Database connection as separate parts, so passwords may contain any characters
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: ${APP_DB_USER:-imcp}
+  DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+  DB_NAME: ${APP_DB_NAME:-imcp}
+
+services:
+  postgres:
+    # Postgres 18 with pgvector. Blank = the public image; on work laptops (Docker Hub blocked) set the
+    # internal registry's in .env.
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg18}
+    environment:
+      # Admin (superuser) login, used only for setup and maintenance
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:?set POSTGRES_ADMIN_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      # The app's own user and databases, created on first start by docker/postgres/initdb/01-app-database.sql
+      APP_DB_USER: ${APP_DB_USER:-imcp}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      APP_DB_NAME: ${APP_DB_NAME:-imcp}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/18/docker, so mount the parent folder
+      - pgdata:/var/lib/postgresql
+      # Runs once, on the first start of an empty database
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Brings the database schema up to date, then exits. The app only starts if this succeeded.
+  migrate:
+    build: *app_build
+    env_file:
+      - path: .env
+        required: false
+    environment: *db_env
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build: *app_build
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *db_env
+      APP_HOST: 0.0.0.0
+      APP_PORT: "8787"
+    ports:
+      - "127.0.0.1:8787:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

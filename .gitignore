@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+.env.prefilled
+data/
+inputs/
+# Made per machine from its own package index; versions are pinned in pyproject.toml
+uv.lock
+_to_delete/
+node_modules/
+dist/
+*.log
+
+# Local backups (keep these outside the repo if you can)
+git-history-backup*

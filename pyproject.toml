@@ -1,0 +1,107 @@
+[project]
+name = "implementation-mcp"
+version = "0.1.0"
+description = "IM MCP: scoping and solution proposal tools for Adyen implementation managers"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic==1.20.0",
+    "fastapi==0.142.2",
+    "httpx>=0.28.1",
+    "mcp>=2.2.0",
+    "openai==3.24.0",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "sqlalchemy>=2.0.54",
+    "uvicorn>=0.53.0",
+]
+
+[project.scripts]
+imcp-mcp = "imcp.mcp_server:main"
+
+[build-system]
+requires = ["hatchling==1.32.3"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imcp"]
+
+[tool.uv]
+# Exact versions for every package, including indirect ones. Your Artifactory blocks very new
+# releases and doesn't report reliable upload dates, so we pin versions instead of using a date
+# cut-off. All of these were published before 2026-09-20, except fastapi 0.142.2 (2026-09-30)
+# and openai 3.24.0 (2026-10-02), which are available in Artifactory.
+constraint-dependencies = [
+    "alembic==1.20.0",
+    "annotated-doc==0.0.5",
+    "annotated-types==0.8.0",
+    "anyio==4.15.1",
+    "attrs==26.1.0",
+    "certifi==2026.7.22",
+    "cffi==2.1.1 ; platform_python_implementation != 'PyPy'",
+    "click==8.5.0",
+    "colorama==0.4.6 ; sys_platform == 'win32'",
+    "cryptography==50.0.1",
+    "fastapi==0.142.2",
+    "greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'",
+    "h11==0.16.0",
+    "httpcore==1.0.9",
+    "httpcore2==2.13.0 ; sys_platform != 'emscripten'",
+    "httpx==0.28.1",
+    "httpx2==2.13.0",
+    "httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'",
+    "idna==3.20",
+    "iniconfig==2.3.0",
+    "jiter==0.17.0",
+    "jsonschema==4.26.0",
+    "jsonschema-specifications==2025.9.1",
+    "mako==1.4.1",
+    "markupsafe==3.0.3",
+    "mcp==2.2.0",
+    "mcp-types==2.2.0",
+    "openai==3.24.0",
+    "opentelemetry-api==1.44.0",
+    "packaging==26.3",
+    "pgvector==0.5.0",
+    "pluggy==1.6.0",
+    "psycopg==3.3.6",
+    "psycopg-binary==3.3.6 ; implementation_name != 'pypy'",
+    "pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'",
+    "pydantic==2.13.5",
+    "pydantic-core==2.46.5",
+    "pydantic-settings==2.15.0",
+    "pygments==2.21.0",
+    "pyjwt==2.14.0",
+    "pytest==9.1.1",
+    "python-dotenv==1.2.3",
+    "python-multipart==0.0.32",
+    "pywin32==312 ; sys_platform == 'win32'",
+    "referencing==0.37.0",
+    "rpds-py==2026.6.3",
+    "sniffio==1.3.1",
+    "sqlalchemy==2.0.54",
+    "sse-starlette==3.4.11",
+    "starlette==1.6.0",
+    "truststore==0.10.4 ; sys_platform != 'emscripten'",
+    "typing-extensions==4.16.0",
+    "typing-inspection==0.4.4",
+    "tzdata==2026.4 ; sys_platform == 'win32'",
+    "uvicorn==0.53.0",
+]
+
+# Same idea for the tools used to build this project itself
+build-constraint-dependencies = [
+    "packaging==26.3",
+    "pathspec==1.1.1",
+    "pluggy==1.6.0",
+    "tomlkit==0.15.1",
+    "trove-classifiers==2026.6.1.19",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

@@ -1,0 +1,11 @@
+.venv
+**/__pycache__
+.pytest_cache
+.env
+data
+docs
+tests
+_to_delete
+node_modules
+dist
+*.md
