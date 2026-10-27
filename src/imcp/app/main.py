@@ -13,6 +13,7 @@ from imcp.app.bank_api import router as bank_router
 from imcp.app.db import check_db, create_db_engine
 from imcp.app.graph_api import router as graph_router
 from imcp.app.jobs import JobStore
+from imcp.app.proposal_api import router as proposal_router
 from imcp.app.scope_api import router as scope_router
 from imcp.config import AppSettings, describe_config
 from imcp.llm import EmbeddingClient, ModelClient
@@ -45,6 +46,7 @@ def create_app(
     app.include_router(scope_router)
     app.include_router(answers_router)
     app.include_router(graph_router)
+    app.include_router(proposal_router)
 
     @app.get("/health")
     def health(check_model: bool = False) -> JSONResponse:

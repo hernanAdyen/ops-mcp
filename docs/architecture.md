@@ -14,7 +14,7 @@ integration and writing the solution proposal:
 |---|---|---|
 | `/create-scope` | Picks the scoping questions for one merchant from the master question bank (by tags, plus our model matching the IM's notes) and builds a scope sheet in the IM's Drive, one tab per project track | Built |
 | `/source-scope-answers` | Finds the answers in whatever the IM has from the merchant (notes, a call summary, a transcript, an email) and writes them into a track's tab of the scope sheet for the IM to review | Built |
-| `/propose-solution` | Writes the solution proposal from the scope | Next |
+| `/propose-solution` | Writes the solution proposal from the scope: the merchant's answers, a research brief from the knowledge graph, the IM's model's researched solution, a diagram and documentation links, into a copy of the proposal master | Built for one track; not yet run on a real document |
 
 Each command is a **skill** (`skills/<name>/SKILL.md`): plain instructions Claude follows, calling our
 tools and the IM's Google connectors.
@@ -134,6 +134,34 @@ block of sections per track.
    additions to that tab.
 3. The skill sends the batch, reads column A back, asks consent, and calls `im_answers_record`.
 
+### /propose-solution
+
+The one command where the IM's own model writes: the server makes no chat model call here.
+
+1. The skill reads the track tab's ID, answer, status, source and question columns and calls
+   `im_proposal_start`. The server picks the answers (the IM's own win, `suggested` ones are used but
+   flagged, `rejected` are skipped), lists the open priority-1 questions, and builds the **research
+   brief** from the graph: the requirements, the nearest doc pages and diagrams (`nearest_assets`,
+   narrowed by the track's tags from `opportunity.tracks`), the designs the graph knows, and instructions.
+2. The IM's model researches with its own tools (the brief's `.md` links first) and drafts 1.4, 1.5 and
+   the track's Technical Considerations and Integration Design as structured JSON with the links it used.
+3. The skill copies the proposal master into `SolutionProposals`, reads the copy and derives a compact
+   **outline** (one item per structural element: indexes, text, style; tables with rows and cells). The
+   document itself is too big to pass through Claude, so this is the one place a skill derives data;
+   the server checks that every index lines up the way the Docs API lays a document out, and refuses
+   the plan otherwise.
+4. `im_proposal_plan`: the server checks the draft (known sections, lengths, every link an asset node or
+   a page under the docs host), fills the documentation list from the brief up to `max_links`, picks the
+   diagram, and returns one Docs `batchUpdate`: edits that use indexes are computed from the outline and
+   ordered from the end of the document backwards, `replaceAllText` runs last. The Features table's one
+   empty row is reused and further rows inserted below it, their cells filled by computed indexes.
+5. The skill sends the batch unchanged and calls `im_proposal_record`, which records the run and a
+   `source` row of type proposal pointing at the document, for ingestion later.
+
+One track per document for now. The master may carry a second block for a further track (a level-2
+heading with `{{Track}}`); with one track the plan removes it whole, keeping the newline before the next
+section's table because the Docs API won't delete it. Duplicating that block per further track is next.
+
 ## 5. Code map
 
 | Path | What's there |
@@ -149,7 +177,15 @@ block of sections per track.
 | `src/imcp/graph/assets.py` | Loads asset nodes (doc pages now, diagrams next): dry run or apply, embeds new and changed, deprecates what dropped out, records an `ingestion_run` |
 | `src/imcp/graph/load_docs.py` | One doc page load: fetch the index from `DOCS_INDEX_URL`, apply the rules, load. The index is never stored |
 | `src/imcp/graph/search.py` | `nearest_assets`: tags narrow (an asset with no value for a tag applies to everyone), the embedding ranks |
-| `src/imcp/app/graph_api.py` | `POST /graph/loads/docs` as a job, `GET /graph/jobs/{id}` |
+| `src/imcp/graph/diagrams.py` | The owner's flow diagrams CSV (title, url, description, tags) as `flow_diagram` asset nodes |
+| `src/imcp/app/graph_api.py` | `POST /graph/loads/docs` and `/graph/loads/diagrams` as jobs, `GET /graph/jobs/{id}` |
+| `src/imcp/proposal/answers.py` | Pure: which answers of a track go into the proposal, the Features table rows (tick, box or text) |
+| `src/imcp/proposal/brief.py` | The research brief: requirements, `nearest_assets` for doc pages and diagrams, known designs, instructions |
+| `src/imcp/proposal/outline.py` | The document outline the skill passes, and the checks that its indexes line up |
+| `src/imcp/proposal/draft.py` | Checking the IM's model's draft: sections, lengths, links against asset nodes or the docs host |
+| `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, Discovery, Features table, diagram, links) |
+| `src/imcp/proposal/runs.py` | `/propose-solution` start, plan and record |
+| `src/imcp/app/proposal_api.py` | `POST /proposal/runs`, `/proposal/runs/{id}/doc-plan`, `/proposal/runs/{id}/record` |
 | `src/imcp/db/` | Tables (`models.py`), enums and the session helpers. Migrations are in `migrations/` |
 | `src/imcp/scope/candidates.py` | The tag query |
 | `src/imcp/scope/topics.py` | Topic matching with our model |
@@ -163,7 +199,7 @@ block of sections per track.
 | `src/imcp/scope/call_prompt.py` | The call-notes prompt |
 | `src/imcp/scope/text.py` | Text helpers: trimming, scrubbing, comparing questions |
 | `skills/` | The commands, as skills |
-| `tests/` | Tests. `tests/db/` need the Postgres test database |
+| `tests/` | Tests. `tests/db/` need the Postgres test database. `fakes.py` has `FakeModel` and `FakeEmbedder`; `fake_doc.py` plays a Docs batch on an index model, like `FakeTab` for Sheets |
 
 ## 6. Data
 

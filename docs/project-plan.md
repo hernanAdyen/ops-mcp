@@ -20,20 +20,32 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/create-
 | 4 | `/source-scope-answers` | Answers from any merchant material, written into Project Scope; review in the sheet; jobs for slow runs; consent before sharing new questions |
 | 4+ | Smaller `/create-scope` batch | No sort when the master is in order (the master is now sorted by subsection, priority, ID) |
 | 5 | Project tracks | A scope has one or more tracks, named by the IM at the start of `/create-scope`, each with its own tags and its own tab (title = track name); the Introduction and Suggested additions in the first tab only; `/source-scope-answers` runs per tab; tracks kept on the opportunity (migration 0004); `im_scope_start` is a job (`im_scope_wait`) |
+| 7 | `/propose-solution` (one track) | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left |
 | 6 | Embeddings and the doc page loader | `EmbeddingClient` (OpenAI-compatible `/embeddings`, called by the server with its own key; `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` fall back to the chat model's); `node.embedding` takes any size (migration 0005), each node records its model, no normalising, cosine distance, exact search; `im_graph_load_docs` reads the Adyen docs index (`DOCS_INDEX_URL`, `llms.txt`) and the rules file `data/graph/adyen-doc-pages.csv` (about 950 of 1,300 non-payment-method pages) and loads one asset node per page: link, title, one-line description, tags, embedding, never the content; dry run then apply, deprecate not delete, `ingestion_run` recorded; `nearest_assets` search. Not yet run against the live index with a real embedding model |
 
 ## Next
 
-1. **Run the doc page load for real:** set `EMBEDDING_MODEL` and `DOCS_INDEX_URL`, rebuild the app server
-   (migration 0005), `im_graph_load_docs` dry run, review, apply.
-2. **Diagram loader:** the owner's curated diagrams (one folder, then a CSV: title, URL, description,
-   tags) as `flow_diagram` asset nodes through the same loader. Waiting on the folder.
-3. **`/propose-solution`.** Design below. Section 3 works as a research brief: the graph finds the
-   designs, considerations, doc pages and diagrams for a track; the IM's own model researches and
-   drafts; the server checks every link against the asset nodes and builds the document.
-4. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
+1. **The block for further tracks:** `im_proposal_plan` takes one track today. The owner's master keeps
+   a second block ("2.2 {{Track}} - Scope", "3.2 {{Track}} - Proposed Solution") that the one-track plan
+   removes; for several tracks it is the template to duplicate, by index, once per further track
+   (headings, paragraphs, a table). Decide first whether 2.1/3.1 stay a project-level block or become
+   track 1.
+2. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
+   SVG). Loader built and run with one stand-in.
+3. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
    considerations and their edges come from real proposals and the tool improves as more are added.
-5. **Evals:** leave-one-out on the reference proposals; extraction checked against answered banks.
+4. **Evals:** leave-one-out on the reference proposals; extraction checked against answered banks.
+
+### Learned on the first real run (2026-10-27, Northwind test sheet)
+
+- The Docs API refuses to delete the newline of the paragraph right before a table. Block removals and
+  emptied placeholders keep their final newline; `FakeDoc` enforces the same rule.
+- `insertInlineImage` with a width only keeps the aspect ratio (440 pt wide came out 286 pt high).
+- `replaceAllText` also touches the stale table of contents, so the TOC shows old heading names until
+  the IM refreshes it (the reply tells them).
+- A `documents.get` of the master is 120 KB of JSON; the skill derives the outline (97 elements, 8 KB)
+  and the server's contiguity and table checks accepted it first time.
+- Docs can't insert SVG images: the diagram URLs must be PNG, JPEG or GIF.
 
 ## /propose-solution design (agreed so far, 2026-10-26)
 
@@ -104,18 +116,11 @@ Each track tab of the scope sheet gives one 2.x and one 3.x block, in tab order.
    with a recommendation trace (which rules or graph nodes fired, which answers were used, by ID; never
    the text), and returns the feedback link.
 
-### Code (planned)
+### Code
 
-| Path | What |
-|---|---|
-| `src/imcp/proposal/brief.py` | The research brief: answers → requirements → graph walk + `nearest_assets` → links, designs, considerations, instructions |
-| `src/imcp/proposal/answers.py` | Picks the answers to use, finds conflicts and open P1s, per track |
-| `src/imcp/proposal/draft.py` | Checking the IM's model's draft (section keys, links against asset nodes, lengths) |
-| `src/imcp/proposal/doc_plan.py` | The Docs batch (pure function) |
-| `src/imcp/proposal/runs.py` | start, plan, record |
-| `src/imcp/app/proposal_api.py`, tools in `mcp_server.py` | Router and thin tools |
-| `skills/propose-solution/SKILL.md` | The command |
-| `tests/` | `FakeDoc` (plays a Docs batch on a text model, like `FakeTab`), answer-picking tests |
+Built 2026-10-26; see the code map in architecture.md. `src/imcp/proposal/` (answers, brief, outline,
+draft, doc_plan, runs), `src/imcp/app/proposal_api.py`, the three tools, `skills/propose-solution/SKILL.md`,
+and `tests/fake_doc.py` (plays a Docs batch on an index model). One track per document so far.
 
 ### Decided 2026-10-26
 

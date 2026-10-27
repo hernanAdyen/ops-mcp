@@ -33,6 +33,7 @@ def inputs_dir(settings: McpSettings) -> Path:
 WAIT_SECONDS = 40
 
 DOC_RULES_FILE = "adyen-doc-pages.csv"  # in data/graph/: which Adyen doc pages go into the graph
+DIAGRAMS_FILE = "diagrams.csv"  # in data/graph/: the owner's curated flow diagrams
 TEXT_SUFFIXES = {".txt", ".md", ".vtt", ".srt", ".csv", ".json", ".eml"}
 MAX_INPUT_BYTES = 600_000
 Kind = Literal["transcript", "summary", "notes", "email", "document"]
@@ -80,6 +81,17 @@ class TrackChangesArg(BaseModel):
 class TabArg(BaseModel):
     name: str = Field(description="The tab's title (the track's name)")
     sheet_question_ids: list[str] = Field(description="Its column A, read back after the batch, starting with 'id'")
+
+
+class ProposalTabArg(BaseModel):
+    """One track tab of the scope sheet, as read for /propose-solution."""
+
+    name: str = Field(description="The tab's title (the track's name)")
+    id_column: list[str] = Field(description="Column A as read, starting with its 'id' header")
+    columns: dict[str, list[str]] = Field(
+        description="By header name, each column as read starting with its header: answer (required), and "
+                    "status, source and question where the tab has them"
+    )
 
 
 def read_input(folder: Path, name: str) -> str:
@@ -426,6 +438,65 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
                                  "share_new_questions": share_new_questions})
 
     @server.tool(
+        name="im_proposal_start",
+        title="Start a solution proposal (/propose-solution step 1)",
+        description=(
+            "Starts a /propose-solution run from the scope sheet. Pass the sheet's file ID and every track tab "
+            "(its title, column A, and the answer, status, source and question columns as read). The server picks "
+            "the answers to use (the IM's own win; suggested ones are used but flagged; rejected are skipped) and "
+            "builds a research brief per track from the knowledge graph: the requirements, the nearest documentation "
+            "pages and flow diagrams, the known designs, and instructions. Then YOU research and draft section 3 per "
+            "track (and 1.4/1.5) following the instructions, and call im_proposal_plan with the draft. Returns a "
+            "draft_id, the merchant, the answers per track, the open priority-1 questions and the briefs."
+        ),
+    )
+    async def im_proposal_start(sheet_id: str, tabs: list[ProposalTabArg], merchant_name: str | None = None,
+                                max_links: int = 8) -> str:
+        body = {"sheet_id": sheet_id, "merchant_name": merchant_name, "max_links": max_links,
+                "tabs": [t.model_dump() for t in tabs]}
+        return await post("/proposal/runs", body, timeout=90, compact=True)
+
+    @server.tool(
+        name="im_proposal_plan",
+        title="Plan the proposal document (/propose-solution step 2)",
+        description=(
+            "After the research: give the draft_id, the same tabs as at start, your draft "
+            "({introduction: {background, goals}, tracks: [{name, technical_considerations: [paragraphs], "
+            "integration_design: [paragraphs], links: [urls]}]}) and the copy's outline: one item per element of "
+            "the document body, in order, each with its startIndex as `s` and endIndex as `e`: a paragraph "
+            "{s, e, text, style} (text without the final newline, cut to 40 characters unless it contains '{{'; "
+            "style = namedStyleType), a table {s, e, rows: [{s, e, cells: [{s, e, text}]}]}, anything else "
+            "{s, e, kind}. The server checks the draft (known sections, lengths, links only from the brief or the "
+            "docs site) and the outline, and returns the exact Docs batchUpdate `requests` to send unchanged. "
+            "If it refuses, fix what it names and call again."
+        ),
+    )
+    async def im_proposal_plan(draft_id: str, tabs: list[ProposalTabArg], draft: dict, outline: list[dict]) -> str:
+        try:
+            path = run_path(draft_id, "doc-plan", base="/proposal/runs")
+        except ValueError:
+            return "draft_id should be the draft_id returned by im_proposal_start."
+        return await post(path, {"tabs": [t.model_dump() for t in tabs], "draft": draft, "outline": outline},
+                          timeout=60, compact=True)
+
+    @server.tool(
+        name="im_proposal_record",
+        title="Record the proposal run (/propose-solution step 3)",
+        description=(
+            "After the batch update: give the draft_id, the copy's file ID and link, and any {{tokens}} you saw left "
+            "in the document (normally none). Records the run and the document for later ingestion, and returns the "
+            "things to tell the IM: suggested answers used, open priority-1 questions, whether a diagram was placed, "
+            "and the feedback form link."
+        ),
+    )
+    async def im_proposal_record(draft_id: str, doc_id: str, doc_url: str, leftover_tokens: list[str] | None = None) -> str:
+        try:
+            path = run_path(draft_id, "record", base="/proposal/runs")
+        except ValueError:
+            return "draft_id should be the draft_id returned by im_proposal_start."
+        return await post(path, {"doc_id": doc_id, "doc_url": doc_url, "leftover_tokens": leftover_tokens or []})
+
+    @server.tool(
         name="im_graph_load_docs",
         title="Load the Adyen doc pages into the graph (admin)",
         description=(
@@ -451,18 +522,39 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         return await job_reply("POST", "/graph/loads/docs", body)
 
     @server.tool(
+        name="im_graph_load_diagrams",
+        title="Load the flow diagrams into the graph (admin)",
+        description=(
+            "Loads the curated flow diagrams into the IM MCP's graph as asset nodes, from a CSV in the repo's "
+            f"data/graph/ folder (default {DIAGRAMS_FILE}; columns title, url, description, channels, pillars, "
+            "categories, platforms, note; the url must be a public https link to a PNG, JPEG or GIF). Rows that are "
+            "no longer in the file are deprecated, never deleted. By default a dry run: show the report to the user and "
+            "only call again with apply=true after they explicitly confirm. If it returns pending, call im_graph_wait."
+        ),
+    )
+    async def im_graph_load_diagrams(file: str | None = None, apply: bool = False) -> str:
+        try:
+            path = pick_csv(data_dir(settings) / "graph", file or DIAGRAMS_FILE)
+        except (ValueError, FileNotFoundError) as exc:
+            return str(exc)
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+        body = {"csv": path.read_text(encoding="utf-8-sig"), "source_ref": f"{path.name} (modified {modified})",
+                "apply": apply}
+        return await job_reply("POST", "/graph/loads/diagrams", body)
+
+    @server.tool(
         name="im_graph_wait",
         title="Wait for a graph load to finish",
         description=(
-            "When im_graph_load_docs returns pending with a job_id, call this with the job_id. It waits up to "
-            f"{WAIT_SECONDS} seconds and returns the load report, or pending again."
+            "When im_graph_load_docs or im_graph_load_diagrams returns pending with a job_id, call this with the "
+            f"job_id. It waits up to {WAIT_SECONDS} seconds and returns the load report, or pending again."
         ),
     )
     async def im_graph_wait(job_id: str) -> str:
         try:
             uuid.UUID(job_id)
         except ValueError:
-            return "job_id should be the job_id returned by im_graph_load_docs."
+            return "job_id should be the job_id returned by the graph load tool."
         return await job_reply("GET", f"/graph/jobs/{job_id}")
 
     return server
