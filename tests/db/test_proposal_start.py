@@ -1,4 +1,4 @@
-"""/propose-solution start: answers per track, the research brief from the graph. Needs the test database."""
+"""/ops-create-solution start: answers per track, the research brief from the graph. Needs the test database."""
 
 import json
 
@@ -177,4 +177,4 @@ def test_api_start(connection):
     bad = client.post("/proposal/runs", json={"sheet_id": SHEET, "tabs": [{"name": "T", "id_column": ["x"], "columns": {}}]})
     assert bad.status_code == 422
     with session_on(connection) as s:
-        assert s.scalar(select(Generation.command).where(Generation.command == "propose-solution")) == "propose-solution"
+        assert s.scalar(select(Generation.command).where(Generation.command == "ops-create-solution")) == "ops-create-solution"

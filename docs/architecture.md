@@ -12,9 +12,9 @@ integration and writing the solution proposal:
 
 | Command | What it does | Status |
 |---|---|---|
-| `/create-scope` | Picks the scoping questions for one merchant from the master question bank (by tags, plus our model matching the IM's notes) and builds a scope sheet in the IM's Drive, one tab per project track | Built |
-| `/source-scope-answers` | Finds the answers in whatever the IM has from the merchant (notes, a call summary, a transcript, an email) and writes them into a track's tab of the scope sheet for the IM to review | Built |
-| `/propose-solution` | Writes the solution proposal from the scope: the merchant's answers, a research brief from the knowledge graph, the IM's model's researched solution, a diagram and documentation links, into a copy of the proposal master | Built for one track; not yet run on a real document |
+| `/ops-create-scope` | Picks the scoping questions for one merchant from the master question bank (by tags, plus our model matching the IM's notes) and builds a scope sheet in the IM's Drive, one tab per project track | Built |
+| `/ops-answer-scope` | Finds the answers in whatever the IM has from the merchant (notes, a call summary, a transcript, an email) and writes them into a track's tab of the scope sheet for the IM to review | Built |
+| `/ops-create-solution` | Writes the solution proposal from the scope: the merchant's answers, a research brief from the knowledge graph, the IM's model's researched solution, a diagram and documentation links, into a copy of the proposal master | Built; run on real documents with one and two tracks |
 
 Each command is a **skill** (`skills/<name>/SKILL.md`): plain instructions Claude follows, calling our
 tools and the IM's Google connectors.
@@ -23,7 +23,7 @@ tools and the IM's Google connectors.
 
 ```
  IM's Claude (desktop)
-   │  skills: /create-scope, /source-scope-answers
+   │  skills: /ops-create-scope, /ops-answer-scope
    │
    ├── Google Drive and Sheets connectors (the IM's own access)
    │
@@ -100,14 +100,14 @@ Each command follows the same shape: **start → (plan) → write → record**.
 
 A scope has one or more **project tracks**: the parts of a project the IM wants to scope and propose
 separately (e.g. "Ecommerce US" and "In-person payments UK"). The IM names them at the start of
-`/create-scope`, and each gets its own tags and its own tab in the scope sheet, titled with the track's
+`/ops-create-scope`, and each gets its own tags and its own tab in the scope sheet, titled with the track's
 name. The default is one track, whose tab keeps the master's name, Project Scope. The two Introduction
 questions and the Suggested additions go in the first tab only: there is one introduction per proposal.
 The tracks and their tags are kept on the `opportunity` (`tracks`); the tab title is the track name
-everywhere else. `/source-scope-answers` fills one tab per run; `/propose-solution` will write one
+everywhere else. `/ops-answer-scope` fills one tab per run; `/ops-create-solution` will write one
 block of sections per track.
 
-### /create-scope
+### /ops-create-scope
 
 1. The skill asks the IM for the merchant, the tracks (one short message; "one" is the usual answer),
    tags (one question card per track: channels, pillars, categories) and notes.
@@ -128,7 +128,7 @@ block of sections per track.
    small batch that adds a `Call prompt` tab with the prompt text, and the IM gets a link to that tab,
    so nothing long passes through chat. The offer comes after the sheet, never before.
 
-### /source-scope-answers
+### /ops-answer-scope
 
 1. The skill gets the scope sheet, which track tabs the material covers (asked only when there are
    several) and the merchant material. Then, tab by tab, it reads the tab's ID, answer and review columns.
@@ -138,7 +138,7 @@ block of sections per track.
    additions to that tab.
 3. The skill sends the batch, reads column A back, asks consent, and calls `im_answers_record`.
 
-### /propose-solution
+### /ops-create-solution
 
 The one command where the IM's own model writes: the server makes no chat model call here.
 
@@ -193,16 +193,16 @@ on. With one track the headings read "Project".
 | `src/imcp/proposal/outline.py` | The document outline the skill passes, and the checks that its indexes line up |
 | `src/imcp/proposal/draft.py` | Checking the IM's model's draft: sections, lengths, links against asset nodes or the docs host |
 | `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, the Discovery and Features tables, diagram, links), one block per track: the `{{Track}}` block is the template, other blocks are removed, further tracks are written from the template by index. A two-column table in the master (header row + one empty body row) is filled by reusing the empty row and inserting the rest below it |
-| `src/imcp/proposal/runs.py` | `/propose-solution` start, plan and record |
+| `src/imcp/proposal/runs.py` | `/ops-create-solution` start, plan and record |
 | `src/imcp/app/proposal_api.py` | `POST /proposal/runs`, `/proposal/runs/{id}/doc-plan`, `/proposal/runs/{id}/record` |
 | `src/imcp/db/` | Tables (`models.py`), enums and the session helpers. Migrations are in `migrations/` |
 | `src/imcp/scope/candidates.py` | The tag query |
 | `src/imcp/scope/topics.py` | Topic matching with our model |
-| `src/imcp/scope/runs.py` | `/create-scope` start, plan and record, per track |
-| `src/imcp/scope/sheet_plan.py` | The `/create-scope` Sheets batch: a tab per track, deletions, order, sections, groups, filter |
+| `src/imcp/scope/runs.py` | `/ops-create-scope` start, plan and record, per track |
+| `src/imcp/scope/sheet_plan.py` | The `/ops-create-scope` Sheets batch: a tab per track, deletions, order, sections, groups, filter |
 | `src/imcp/scope/extract.py` | Answer extraction with our model, and checking what it returns |
-| `src/imcp/scope/answers.py` | `/source-scope-answers` start and record |
-| `src/imcp/scope/answers_plan.py` | The `/source-scope-answers` Sheets batch |
+| `src/imcp/scope/answers.py` | `/ops-answer-scope` start and record |
+| `src/imcp/scope/answers_plan.py` | The `/ops-answer-scope` Sheets batch |
 | `src/imcp/scope/additions.py` | The Suggested additions section, shared by both commands |
 | `src/imcp/scope/queue.py` | The review queue for new questions, and reading back what the IM did |
 | `src/imcp/scope/call_prompt.py` | The call-notes prompt |

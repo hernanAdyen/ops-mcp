@@ -1,9 +1,9 @@
 ---
-name: create-scope
-description: Use when an implementation manager runs /create-scope or wants a scoping question sheet for a new merchant. Picks bank questions by tags and context, one tab per project track, builds the sheet in Drive, and returns the link with a summary.
+name: ops-create-scope
+description: Use when an implementation manager runs /ops-create-scope or wants a scoping question sheet for a new merchant. Picks bank questions by tags and context, one tab per project track, builds the sheet in Drive, and returns the link with a summary.
 ---
 
-# /create-scope
+# /ops-create-scope
 
 Build a prefiltered scoping question sheet for one merchant from the IM question bank, and give the
 IM the link and a short summary. The IM reviews and trims the questions in the sheet, not in chat.
@@ -20,7 +20,7 @@ the IM to check that `docker compose up` is running, and stop.
 
 ## 1. Gather the inputs
 
-Use what the IM already gave (e.g. `/create-scope Acme, PFS + CAPITAL, migrating tokens`) and ask
+Use what the IM already gave (e.g. `/ops-create-scope Acme, PFS + CAPITAL, migrating tokens`) and ask
 only for what's missing.
 
 - **Merchant name** (required). If it's missing, ask for it in one short chat message first.
@@ -40,7 +40,7 @@ only for what's missing.
   - "All", or every option of a question selected, means no filter on that tag: pass an empty list.
     Each category group means all the categories in it.
   - Subsections, priorities and platforms aren't asked: don't filter on them, unless the IM gave them
-    in the command (e.g. `/create-scope Acme, BALANCE, P1 only`, or "discovery only"). Pass subsections
+    in the command (e.g. `/ops-create-scope Acme, BALANCE, P1 only`, or "discovery only"). Pass subsections
     as `introduction`, `discovery`, `features_functionality`, and priorities as 1, 2, 3.
 - **Context.** After the cards, unless the IM already gave it, ask in one short chat message for their
   notes on the merchant (e.g. "launching Capital for their sellers, migrating tokens from their current
@@ -129,7 +129,7 @@ Keep it short:
 - that the `found_by` column says why each question is there, and the IM can delete rows they don't need;
 - the Suggested additions at the end of the first tab, if any: questions drafted for topics the bank
   doesn't cover. The IM keeps, edits or deletes them in the sheet;
-- that `/source-scope-answers` fills the answers from merchant material (that output, notes, a call
+- that `/ops-answer-scope` fills the answers from merchant material (that output, notes, a call
   summary, emails) when they have some, one tab at a time;
 - any mismatch `im_scope_record` reports (per track), and what it means;
 - the feedback form link from `im_scope_record`, asking the IM to rate this run.
@@ -147,7 +147,7 @@ If the IM says no, or doesn't answer, stop. If yes:
    `already_there`).
 3. Reply with one line: **"Call prompt for Gong"** as a link on `url` (the sheet's `Call prompt` tab),
    and how many questions it holds (`questions`). After a call they copy it from that tab into their
-   call-notes tool and bring the output to `/source-scope-answers`, which matches answers by ID. Never
+   call-notes tool and bring the output to `/ops-answer-scope`, which matches answers by ID. Never
    print the prompt text in chat.
 
 ## Rules

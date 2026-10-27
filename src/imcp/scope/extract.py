@@ -1,4 +1,4 @@
-"""Answers from the IM's merchant material, with our model (/source-scope-answers).
+"""Answers from the IM's merchant material, with our model (/ops-answer-scope).
 
 The IM shares whatever they have from the merchant: notes, a call summary or transcript, an email
 or a document. It is sent to our model for this run only, and never stored or logged. The model

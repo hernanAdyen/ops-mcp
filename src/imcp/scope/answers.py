@@ -1,4 +1,4 @@
-"""/source-scope-answers in two calls. The IM reviews the result in their own sheet.
+"""/ops-answer-scope in two calls. The IM reviews the result in their own sheet.
 
   start   one track's tab as read + the IM's merchant material -> our model finds answers and new
           questions -> one exact Sheets batch that writes them into that tab (a scope with several
@@ -29,7 +29,8 @@ from imcp.scope.extract import MAX_MATERIAL_CHARS, Material, extract_answers
 from imcp.scope.queue import add_candidates, observe_im_review, sha256
 from imcp.scope.runs import DEFAULT_TRACK, RunError, feedback_link, normalise_name
 
-COMMAND = "source-scope-answers"
+COMMAND = "ops-answer-scope"
+OLD_COMMANDS = ("source-scope-answers",)  # the command's name before 2026-10-27; earlier runs are recorded under it
 FOUND_IN_MATERIAL, FOUND_NEW = "answered in material", "new question"
 MAX_OPEN_LISTED = 10
 
@@ -109,7 +110,7 @@ def _opportunity(session: Session, sheet_id: str) -> tuple[Opportunity | None, M
 def _earlier_runs(session: Session, sheet_id: str, tab_sheet_id: int) -> list[Generation]:
     """Earlier runs on the same tab (runs from before tabs were named count for every tab)."""
     runs = session.scalars(select(Generation).where(
-        Generation.command == COMMAND, Generation.trace["sheet_id"].astext == sheet_id))
+        Generation.command.in_((COMMAND, *OLD_COMMANDS)), Generation.trace["sheet_id"].astext == sheet_id))
     return [g for g in runs if g.trace.get("tab_sheet_id", tab_sheet_id) == tab_sheet_id]
 
 
@@ -120,7 +121,7 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     opp, merchant = _opportunity(session, req.sheet_id)
     merchant_name = merchant.name if merchant else (req.merchant_name or "").strip()
     if not merchant_name:
-        raise RunError(422, "This sheet wasn't made by /create-scope, so I don't know the merchant. Pass merchant_name.")
+        raise RunError(422, "This sheet wasn't made by /ops-create-scope, so I don't know the merchant. Pass merchant_name.")
 
     bank = {q.question_id: q for q in session.scalars(
         select(Question).where(Question.status == E.QuestionStatus.active).order_by(Question.subsection, Question.question_id))}
@@ -279,7 +280,7 @@ def _get_run(session: Session, run_id: str) -> Generation:
     except ValueError:
         gen = None
     if gen is None or gen.command != COMMAND:
-        raise RunError(404, f"There's no /source-scope-answers run with ID {run_id}.")
+        raise RunError(404, f"There's no /ops-answer-scope run with ID {run_id}.")
     if gen.trace.get("stage") not in ("planned", "recorded"):
         raise RunError(409, "This run isn't ready to record.")
     return gen

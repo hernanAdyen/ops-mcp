@@ -1,13 +1,13 @@
 # IM MCP
 
 Tools in Claude for Adyen implementation managers: build a merchant's scoping sheet from the question
-bank, fill it from call notes, and (next) write the solution proposal.
+bank, fill it from call notes, and write the solution proposal.
 
 | Command | What it does |
 |---|---|
-| `/create-scope` | Picks the scoping questions for a merchant and builds a scope sheet in your Drive |
-| `/source-scope-answers` | Finds the answers in your merchant notes, call summaries or emails and writes them into the sheet for you to review |
-| `/propose-solution` | Coming next |
+| `/ops-create-scope` | Picks the scoping questions for a merchant and builds a scope sheet in your Drive |
+| `/ops-answer-scope` | Finds the answers in your merchant notes, call summaries or emails and writes them into the sheet for you to review |
+| `/ops-create-solution` | Writes the solution proposal from the scope sheet into a copy of the proposal master: the merchant's answers, a researched solution per track, a diagram and documentation links |
 
 How it's built: [docs/architecture.md](docs/architecture.md). Status and next steps:
 [docs/project-plan.md](docs/project-plan.md).
@@ -100,7 +100,7 @@ My Drive and create one if needed).
 
 The commands are the skills in `skills/` (one folder each, with a `SKILL.md`). Add them to your Claude
 account, for example by asking Claude in a chat to save the skills in `skills/` as your skills. Once
-saved, `/create-scope` and `/source-scope-answers` appear as commands.
+saved, `/ops-create-scope` and `/ops-answer-scope` appear as commands.
 
 ## 5. Load the question bank
 
@@ -114,10 +114,10 @@ Do this again whenever the master changes.
 
 ## Using it
 
-- `/create-scope Acme`: answer the question card (channels, pillars, sections, categories), add notes
+- `/ops-create-scope Acme`: answer the question card (channels, pillars, sections, categories), add notes
   if you have them, and you get a sheet in `SolutionProposals` in your Drive, plus a prompt you can
   paste into your call-notes tool after calls.
-- `/source-scope-answers`: share what you have from the merchant (paste notes, a call summary or that
+- `/ops-answer-scope`: share what you have from the merchant (paste notes, a call summary or that
   prompt's output). Answers are filled into the sheet as `suggested`; your own answers are never
   overwritten. Long transcripts: save them as a `.txt` file in `inputs/` and say so.
 

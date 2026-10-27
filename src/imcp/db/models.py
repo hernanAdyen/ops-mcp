@@ -150,7 +150,7 @@ class Opportunity(Base):
     pillars: Mapped[list[E.Pillar]] = mapped_column(enum_array(E.Pillar, "pillar"), server_default=EMPTY_ARRAY, nullable=False)
     categories: Mapped[list[E.Category]] = mapped_column(enum_array(E.Category, "category"), server_default=EMPTY_ARRAY, nullable=False)
     platforms: Mapped[list[E.Platform]] = mapped_column(enum_array(E.Platform, "platform"), server_default=EMPTY_ARRAY, nullable=False)
-    # The project tracks from /create-scope: [{"name", "channels", "pillars", "categories", "platforms",
+    # The project tracks from /ops-create-scope: [{"name", "channels", "pillars", "categories", "platforms",
     # "priorities", "subsections"}], one per tab of the scope sheet, in tab order. The tags above are their union.
     tracks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=EMPTY_LIST, nullable=False)
     created_at: Mapped[datetime] = created_at()
@@ -346,7 +346,7 @@ class InstanceLink(Base):
 
 
 class Generation(Base):
-    """One run of a command (e.g. /create-scope), for feedback and traceability."""
+    """One run of a command (e.g. /ops-create-scope), for feedback and traceability."""
 
     __tablename__ = "generation"
     generation_id: Mapped[uuid.UUID] = uuid_pk()

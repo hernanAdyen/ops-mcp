@@ -1,4 +1,4 @@
-"""A /create-scope run in three calls. The server keeps the question list; Claude only sees a summary.
+"""A /ops-create-scope run in three calls. The server keeps the question list; Claude only sees a summary.
 
   start   per track: tag query + topic matching (our model) -> a draft run; returns counts and the
           topic additions by track
@@ -39,7 +39,7 @@ from imcp.scope.sheet_plan import (CALL_PROMPT_TAB, RowInfo, SheetPlanError, Tra
 from imcp.scope.text import same_question
 from imcp.scope.topics import match_topics
 
-COMMAND = "create-scope"
+COMMAND = "ops-create-scope"
 FOUND_TAGS, FOUND_IM = "tags", "added by you"
 DEFAULT_TRACK = "Project Scope"  # the master's tab name: a scope with one track keeps it
 MAX_TRACKS = 6
@@ -165,7 +165,7 @@ def _run(session: Session, run_id: str, stages: tuple[str, ...]) -> Generation:
     except ValueError:
         gen = None
     if gen is None or gen.command != COMMAND:
-        raise RunError(404, f"There's no /create-scope run with ID {run_id}.")
+        raise RunError(404, f"There's no /ops-create-scope run with ID {run_id}.")
     stage = gen.trace.get("stage")
     if stage not in stages:
         if stage == "recorded":

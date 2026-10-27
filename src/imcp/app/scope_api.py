@@ -1,4 +1,4 @@
-"""/create-scope endpoints: start a run, plan the sheet edit, record the run.
+"""/ops-create-scope endpoints: start a run, plan the sheet edit, record the run.
 
 POST /scope/runs                 start (waits however long topic matching takes: tests and scripts)
 POST /scope/jobs                 start as a job: with several tracks our model runs once per track
@@ -16,7 +16,7 @@ from imcp.app.jobs import job_reply
 from imcp.scope.runs import (CallPromptRequest, PlanRequest, RecordRequest, RunError, StartRequest, call_prompt_run,
                              plan_run, record_run, start_run)
 
-router = APIRouter(prefix="/scope", tags=["create-scope"])
+router = APIRouter(prefix="/scope", tags=["ops-create-scope"])
 
 
 def _done(session: Session, result: dict) -> dict:

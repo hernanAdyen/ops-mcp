@@ -1,4 +1,4 @@
-"""/propose-solution: start → plan → write → record.
+"""/ops-create-solution: start → plan → write → record.
 
 Start picks the answers per track and builds the research brief from the graph. The IM's model
 researches and drafts in their own harness. Plan checks the draft and returns the exact Docs batch.
@@ -25,7 +25,7 @@ from imcp.proposal.outline import ElementIn, parse_outline
 from imcp.scope.candidates import bank_status
 from imcp.scope.runs import MAX_TRACKS, RunError, TAG_NAMES, feedback_link, normalise_name
 
-COMMAND = "propose-solution"
+COMMAND = "ops-create-solution"
 # The two Introduction questions (bank IDs are permanent): 1.4 Project Background, 1.5 Project Goals.
 INTRO_BACKGROUND, INTRO_GOALS = "ID-0083", "ID-0084"
 MAX_OPEN_LISTED = 10
@@ -81,7 +81,7 @@ def _opportunity(session: Session, sheet_id: str) -> tuple[Opportunity | None, M
 
 
 def track_tags(opp: Opportunity | None, name: str) -> dict[str, list[str]]:
-    """The track's tags from /create-scope (by tab name), else the opportunity's union, else no filter."""
+    """The track's tags from /ops-create-scope (by tab name), else the opportunity's union, else no filter."""
     if opp is None:
         return {t: [] for t in TAG_NAMES}
     for track in opp.tracks or []:
@@ -105,7 +105,7 @@ def start_proposal(session: Session, settings: AppSettings, embedder, req: Propo
     opp, merchant = _opportunity(session, req.sheet_id)
     merchant_name = merchant.name if merchant else (req.merchant_name or "").strip()
     if not merchant_name:
-        raise RunError(422, "This sheet wasn't made by /create-scope, so I don't know the merchant. Pass merchant_name.")
+        raise RunError(422, "This sheet wasn't made by /ops-create-scope, so I don't know the merchant. Pass merchant_name.")
     bank = {q.question_id: q for q in session.scalars(select(Question).where(Question.status == E.QuestionStatus.active))}
 
     tracks: list[TrackAnswers] = []
@@ -303,7 +303,7 @@ def get_run(session: Session, run_id: str, stages: tuple[str, ...]) -> Generatio
     except ValueError:
         gen = None
     if gen is None or gen.command != COMMAND:
-        raise RunError(404, f"There's no /propose-solution run with ID {run_id}.")
+        raise RunError(404, f"There's no /ops-create-solution run with ID {run_id}.")
     stage = gen.trace.get("stage")
     if stage not in stages:
         if stage == "recorded":

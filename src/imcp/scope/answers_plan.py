@@ -1,6 +1,6 @@
 """Write the answers found in the IM's merchant material into the scope sheet's Project Scope tab.
 
-One exact Sheets batch, as for /create-scope, so no row arithmetic is left to the model:
+One exact Sheets batch, as for /ops-create-scope, so no row arithmetic is left to the model:
   - fill the answers the IM hasn't given. Theirs always win: a different finding goes in a note.
   - review columns to the right of the existing ones: source, confidence, status (a dropdown:
     suggested / confirmed / rejected) and ai_note

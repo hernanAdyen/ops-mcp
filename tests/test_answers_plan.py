@@ -7,7 +7,7 @@ HEADER = ["id", "enum", "question", "options", "answer", "notes", "priority", "s
           "category", "platform", "found_by"]
 WIDTH = len(HEADER)
 ANSWER, PRIORITY, QUESTION = 4, 6, 2
-# A scope sheet as /create-scope leaves it: section headings have no ID
+# A scope sheet as /ops-create-scope leaves it: section headings have no ID
 COLUMN_A = ["id", "", "ID-0083", "", "ID-0069", "ID-0019", "", "ID-0037", "ID-0050"]
 P1_ONLY = {"range": {"sheetId": TAB, "startRowIndex": 0, "endRowIndex": 9, "startColumnIndex": 0, "endColumnIndex": WIDTH},
            "filterSpecs": [{"columnIndex": PRIORITY, "filterCriteria": {"hiddenValues": ["2", "3"]}}]}

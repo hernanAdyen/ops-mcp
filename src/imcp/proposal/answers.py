@@ -2,7 +2,7 @@
 
 Rules (agreed 2026-10-26):
   - The IM's own answer wins: no `source`, or `status` confirmed.
-  - A `suggested` answer (found by /source-scope-answers, not yet confirmed) is used, but flagged.
+  - A `suggested` answer (found by /ops-answer-scope, not yet confirmed) is used, but flagged.
   - A `rejected` answer is skipped.
   - Unanswered questions are left out of the document; the open priority-1 ones are listed in the reply.
   - NEW- rows (the IM's own additions) count as Discovery questions, with the text from the sheet.

@@ -1,4 +1,4 @@
-"""The tag query for a new scope (/create-scope).
+"""The tag query for a new scope (/ops-create-scope).
 
 Tag rule: any match within a tag, all chosen tags must match, and a question with no value for a
 tag applies to everyone. A tag the IM leaves empty isn't used.

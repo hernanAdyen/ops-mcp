@@ -1,4 +1,4 @@
-"""/source-scope-answers endpoints.
+"""/ops-answer-scope endpoints.
 
 POST /answers/jobs           start finding answers (our model is slow, so this is a job)
 GET  /answers/jobs/{job_id}  the job's result, or pending
@@ -14,7 +14,7 @@ from imcp.app.jobs import job_reply
 from imcp.scope.answers import AnswersRecordRequest, AnswersStartRequest, record_answers, start_answers
 from imcp.scope.runs import RunError
 
-router = APIRouter(prefix="/answers", tags=["source-scope-answers"])
+router = APIRouter(prefix="/answers", tags=["ops-answer-scope"])
 
 
 @router.post("/runs")

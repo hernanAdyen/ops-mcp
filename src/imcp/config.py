@@ -87,7 +87,7 @@ class McpSettings(_Base):
     PROPOSALS_DRIVE_FOLDER_URL: AnyHttpUrl | None = None
     # Folder the bank-load tool may read CSVs from. Default: the repo's data/ folder (git-ignored).
     IMCP_DATA_DIR: Path | None = None
-    # Folder /source-scope-answers may read merchant material from. Default: the repo's inputs/ (git-ignored).
+    # Folder /ops-answer-scope may read merchant material from. Default: the repo's inputs/ (git-ignored).
     IMCP_INPUTS_DIR: Path | None = None
 
 

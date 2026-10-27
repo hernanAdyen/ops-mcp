@@ -84,7 +84,7 @@ class TabArg(BaseModel):
 
 
 class ProposalTabArg(BaseModel):
-    """One track tab of the scope sheet, as read for /propose-solution."""
+    """One track tab of the scope sheet, as read for /ops-create-solution."""
 
     name: str = Field(description="The tab's title (the track's name)")
     id_column: list[str] = Field(description="Column A as read, starting with its 'id' header")
@@ -222,9 +222,9 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_scope_start",
-        title="Start a scope (/create-scope step 1)",
+        title="Start a scope (/ops-create-scope step 1)",
         description=(
-            "Starts a /create-scope run. A scope has one or more project tracks (e.g. 'Ecommerce US' and "
+            "Starts a /ops-create-scope run. A scope has one or more project tracks (e.g. 'Ecommerce US' and "
             "'In-person payments UK'), each with its own tags and its own tab in the sheet. For one track, pass "
             "the tags directly; for several, pass `tracks` (name + tags each) and leave the tags empty. The server "
             "selects the bank questions that match each track's tags and, if the IM gave context, our model adds "
@@ -273,7 +273,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_scope_sheet_plan",
-        title="Plan the scope sheet (/create-scope step 2)",
+        title="Plan the scope sheet (/ops-create-scope step 2)",
         description=(
             "After copying the master bank: give the draft_id, the copy's Project Scope tab sheetId and "
             "columnCount, its column A exactly as read (starting with the 'id' header, '' for empty cells), its "
@@ -312,7 +312,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_scope_record",
-        title="Record the scope (/create-scope step 3)",
+        title="Record the scope (/ops-create-scope step 3)",
         description=(
             "After the batch update: give the draft_id, the merchant name, the new sheet's ID and link, and "
             "column A of every track's tab read back after the edit (`tabs`, each with the tab's title; for a "
@@ -339,7 +339,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_scope_call_prompt",
-        title="Add the call-notes prompt to the scope sheet (/create-scope, after the reply)",
+        title="Add the call-notes prompt to the scope sheet (/ops-create-scope, after the reply)",
         description=(
             "Only when the IM says yes to the offer after the sheet is made: adds a 'Call prompt' tab to the "
             "recorded scope sheet holding the call-notes prompt (the scope's questions by ID, grouped by track; "
@@ -361,7 +361,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         title="List saved merchant material",
         description=(
             "Lists the text files in the IM MCP's inputs/ folder, where an IM can save long material (such as a "
-            "call transcript) for /source-scope-answers instead of pasting it. Returns names, sizes and dates."
+            "call transcript) for /ops-answer-scope instead of pasting it. Returns names, sizes and dates."
         ),
     )
     async def im_inputs_list() -> str:
@@ -377,7 +377,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_answers_start",
-        title="Find scope answers in merchant material (/source-scope-answers step 1)",
+        title="Find scope answers in merchant material (/ops-answer-scope step 1)",
         description=(
             "Give the scope sheet as read (its file ID; the tab being filled: its title (tab_title, the track's "
             "name; a one-track scope has the tab Project Scope), sheetId, columnCount and rowCount; "
@@ -441,7 +441,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_answers_record",
-        title="Record the answers run (/source-scope-answers step 2)",
+        title="Record the answers run (/ops-answer-scope step 2)",
         description=(
             "After the batch update: give the draft_id, the sheet's link and its column A read back after the edit, "
             "and share_new_questions=true only if the IM agreed to share the new questions for review. Checks the "
@@ -461,9 +461,9 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_proposal_start",
-        title="Start a solution proposal (/propose-solution step 1)",
+        title="Start a solution proposal (/ops-create-solution step 1)",
         description=(
-            "Starts a /propose-solution run from the scope sheet. Pass the sheet's file ID and every track tab "
+            "Starts a /ops-create-solution run from the scope sheet. Pass the sheet's file ID and every track tab "
             "(its title, column A, and the answer, status, source and question columns as read). The server picks "
             "the answers to use (the IM's own win; suggested ones are used but flagged; rejected are skipped) and "
             "builds a research brief per track from the knowledge graph: the requirements, the nearest documentation "
@@ -480,7 +480,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_proposal_plan",
-        title="Plan the proposal document (/propose-solution step 2)",
+        title="Plan the proposal document (/ops-create-solution step 2)",
         description=(
             "After the research: give the draft_id, the same tabs as at start, your draft "
             "({introduction: {background, goals}, tracks: [{name, technical_considerations: [paragraphs], "
@@ -503,7 +503,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     @server.tool(
         name="im_proposal_record",
-        title="Record the proposal run (/propose-solution step 3)",
+        title="Record the proposal run (/ops-create-solution step 3)",
         description=(
             "After the batch update: give the draft_id, the copy's file ID and link, and any {{tokens}} you saw left "
             "in the document (normally none). Records the run and the document for later ingestion, and returns the "

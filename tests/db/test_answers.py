@@ -37,7 +37,7 @@ REPLY = {
 
 
 def scope_sheet(session, model=None, settings=SETTINGS, **plan_kw):
-    """A sheet made by /create-scope (CAPITAL tags, plus token migration by topic), as a fake tab."""
+    """A sheet made by /ops-create-scope (CAPITAL tags, plus token migration by topic), as a fake tab."""
     run_id = start_run(loaded(session), settings, model or TOKENS,
                        StartRequest(tags=CAPITAL, context="They migrate tokens."))["draft_id"]
     planned = plan(session, run_id, header_row=HEADER, **plan_kw)
@@ -207,7 +207,7 @@ def test_material_size_is_limited():
                                                         {"label": "b", "text": "x" * 60_000}])
 
 
-# --- topic gaps in /create-scope ----------------------------------------------------------------
+# --- topic gaps in /ops-create-scope ----------------------------------------------------------------
 
 LOYALTY = FakeModel({"topics": ["loyalty"], "additions": [],
                      "uncovered_topics": [{"topic": "loyalty", "question": "Do you run a loyalty or rewards program?",

@@ -1,9 +1,9 @@
 ---
-name: source-scope-answers
-description: Use when an implementation manager runs /source-scope-answers or wants answers from merchant material (notes, a call summary or transcript, emails, documents) filled into their scope sheet. Fills only empty answers in the scope's track tabs and suggests additions for the IM to review in the sheet.
+name: ops-answer-scope
+description: Use when an implementation manager runs /ops-answer-scope or wants answers from merchant material (notes, a call summary or transcript, emails, documents) filled into their scope sheet. Fills only empty answers in the scope's track tabs and suggests additions for the IM to review in the sheet.
 ---
 
-# /source-scope-answers
+# /ops-answer-scope
 
 Find the answers to the scope sheet's questions in whatever the IM has from the merchant, write them
 into the sheet, and suggest questions the scope doesn't have yet. The IM reviews everything in the
@@ -19,7 +19,7 @@ server, tell the IM to check that `docker compose up` is running, and stop.
 
 ## 1. Gather the inputs
 
-- **The scope sheet.** Use the one `/create-scope` made in this chat, or a link the IM gives. If there's
+- **The scope sheet.** Use the one `/ops-create-scope` made in this chat, or a link the IM gives. If there's
   neither, ask for the link in one short message. Its file ID is the part of the link after `/d/`.
 - **The tabs.** Read the spreadsheet's tabs (fields `sheets.properties` and `sheets.basicFilter`). The
   track tabs are the ones whose row 1 starts with `id` (read `'<title>'!A1` where it isn't obvious).
@@ -28,7 +28,7 @@ server, tell the IM to check that `docker compose up` is running, and stop.
   `gridProperties.columnCount`, `gridProperties.rowCount` and its `basicFilter`, if it has one.
 - **The material.** Ask the IM to share whatever they have from the merchant: paste notes, a call summary,
   a transcript or an email, attach a file, or give a Google Doc link. Don't ask for a particular source or
-  system. The output of the call-notes prompt from `/create-scope` works best, because it answers by ID.
+  system. The output of the call-notes prompt from `/ops-create-scope` works best, because it answers by ID.
   - Give each piece a short label the IM will recognise, e.g. "Call summary, Oct 24" or "Email from
     finance". Use what the IM calls it; ask only if it's unclear. No people's names in labels.
   - Give each piece its kind: `transcript`, `summary`, `notes`, `email` or `document`.
@@ -59,7 +59,7 @@ Call **`im_answers_start`** with: the file ID (`sheet_id`); the tab's title (`ta
 column count and row count; the header row; column A; `columns` (each column you read, by its header
 name, e.g. `{"answer": [...], "status": [...]}`); `new_rows` (`[{id, question}]` for the NEW- rows); the
 `basicFilter` exactly as read (leave it out if there's none); and the material: pasted text as
-`material`, saved files as `files`. If the sheet wasn't made by `/create-scope`, also pass `merchant_name`.
+`material`, saved files as `files`. If the sheet wasn't made by `/ops-create-scope`, also pass `merchant_name`.
 
 It returns a `draft_id`, a `summary` and `requests`. If it returns `pending` with a `job_id` instead (our
 model is still working), call **`im_answers_wait`** with that `job_id`, again if it is still pending,

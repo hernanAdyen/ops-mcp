@@ -1,9 +1,9 @@
 ---
-name: propose-solution
-description: Use when an implementation manager runs /propose-solution or wants the solution proposal document written from their scope sheet. Picks the answers, gets a research brief from the knowledge graph, researches the Adyen docs, and fills a copy of the proposal master in Drive.
+name: ops-create-solution
+description: Use when an implementation manager runs /ops-create-solution or wants the solution proposal document written from their scope sheet. Picks the answers, gets a research brief from the knowledge graph, researches the Adyen docs, and fills a copy of the proposal master in Drive.
 ---
 
-# /propose-solution
+# /ops-create-solution
 
 Write the solution proposal for one merchant from their scope sheet: a copy of the proposal master,
 filled with the merchant's answers (Discovery and Features & Functionality), your researched solution
@@ -33,12 +33,12 @@ running, and stop.
 Call **`im_proposal_start`** with the sheet's file ID and `tabs`: one entry per track tab, in tab order,
 with the tab's title (`name`), its column A (`id_column`) and `columns` (each column you read, keyed by its
 header name, e.g. `{"answer": [...], "status": [...], "source": [...], "question": [...]}`). If the sheet
-wasn't made by `/create-scope`, also pass `merchant_name`.
+wasn't made by `/ops-create-scope`, also pass `merchant_name`.
 
 It returns a `draft_id`, the merchant, `master_doc_url`, the IM's `proposals_folder_url` if their MCP has
 one configured, the introduction answers, and per track: the
 Discovery answers, the Features table rows, the `suggested_used` IDs (answers found by
-`/source-scope-answers` that the IM hasn't confirmed), the open priority-1 questions, and the **brief**:
+`/ops-answer-scope` that the IM hasn't confirmed), the open priority-1 questions, and the **brief**:
 the requirements, the nearest documentation pages (each with a `.md` link that is lighter to read), the
 nearest flow diagrams, the designs the graph knows, what each section covers, and the `instructions`.
 If it returns an error, tell the IM in one line and stop.

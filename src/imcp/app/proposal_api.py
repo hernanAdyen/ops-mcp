@@ -1,4 +1,4 @@
-"""/propose-solution endpoints.
+"""/ops-create-solution endpoints.
 
 POST /proposal/runs                 start: pick the answers per track, build the research briefs
 POST /proposal/runs/{id}/doc-plan   check the draft and the copy's outline, return the Docs batch
@@ -12,7 +12,7 @@ from imcp.app.db import get_session
 from imcp.proposal.runs import PlanRequest, ProposalStartRequest, RecordRequest, plan_proposal, record_proposal, start_proposal
 from imcp.scope.runs import RunError
 
-router = APIRouter(prefix="/proposal", tags=["propose-solution"])
+router = APIRouter(prefix="/proposal", tags=["ops-create-solution"])
 
 
 def _done(session: Session, result: dict) -> dict:

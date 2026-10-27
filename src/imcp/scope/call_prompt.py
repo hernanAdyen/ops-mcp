@@ -1,7 +1,7 @@
 """A prompt the IM can paste into their call-notes tool (for example Gong's AI) after a call.
 
 It lists the scope's questions with their IDs and asks for each answer by ID, or 'not discussed'.
-When the IM brings that output to /source-scope-answers, answers map to questions by ID, so our
+When the IM brings that output to /ops-answer-scope, answers map to questions by ID, so our
 model doesn't have to guess which question a remark answers.
 """
 

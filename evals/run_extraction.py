@@ -1,4 +1,4 @@
-"""Measure /source-scope-answers extraction on a case with known right answers.
+"""Measure /ops-answer-scope extraction on a case with known right answers.
 
 Usage: uv run python evals/run_extraction.py <case> [--server http://localhost:8787]
 

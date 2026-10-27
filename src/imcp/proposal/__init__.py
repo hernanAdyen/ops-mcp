@@ -1,1 +1,1 @@
-"""/propose-solution: the solution proposal document from a scope sheet."""
+"""/ops-create-solution: the solution proposal document from a scope sheet."""

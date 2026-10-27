@@ -1,4 +1,4 @@
-"""/propose-solution plan and record. Needs the test database."""
+"""/ops-create-solution plan and record. Needs the test database."""
 
 import json
 
@@ -95,7 +95,7 @@ def test_plan_refuses_bad_drafts_and_mismatched_tabs(session):
     other_tabs = [tab("Other", ["ID-0001"], ["x"])]
     with pytest.raises(RunError, match="same tabs as at start"):
         plan_proposal(session, SETTINGS, draft_id, PlanRequest(tabs=other_tabs, draft=Draft(**DRAFT), outline=outline))
-    with pytest.raises(RunError, match="no /propose-solution run"):
+    with pytest.raises(RunError, match="no /ops-create-solution run"):
         plan_proposal(session, SETTINGS, "00000000-0000-0000-0000-000000000000", PlanRequest(tabs=ONE_TAB, draft=Draft(**DRAFT), outline=outline))
 
 
