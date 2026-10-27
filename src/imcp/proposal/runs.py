@@ -198,8 +198,6 @@ def plan_proposal(session: Session, settings: AppSettings, run_id: str, req: Pla
     gen = get_run(session, run_id, ("draft", "planned"))
     trace = dict(gen.trace)
     tracks = _tracks_from_tabs(session, req.tabs, trace)
-    if len(tracks) > 1:
-        raise RunError(422, "The document can hold one track so far; several tracks are being built next.")
     assets = _assets(session)
     checked = check_draft(req.draft, [t.name for t in tracks], {u: a["title"] for u, a in assets.items()},
                           _docs_host(settings))
@@ -214,28 +212,32 @@ def plan_proposal(session: Session, settings: AppSettings, run_id: str, req: Pla
         "goals": checked["introduction"]["goals"] or ([intro[INTRO_GOALS].answer] if INTRO_GOALS in intro else []),
     }
 
-    track, t_trace = tracks[0], trace["tracks"][0]
-    drafted = checked["tracks"][track.name]
-    links = list(drafted["links"])
-    for url in t_trace.get("doc_urls", []):  # fill up from the brief's pages, best first
-        if len(links) >= trace["max_links"]:
-            break
-        if url in assets and all(l["url"] != url for l in links):
-            links.append({"url": url, "title": assets[url]["title"]})
-    links = links[:trace["max_links"]]
-    diagram = next(({"url": u, "title": assets[u]["title"]} for u in t_trace.get("diagram_urls", []) if u in assets), None)
+    planned_tracks, links_used, diagrams_used = [], [], []
+    for track, t_trace in zip(tracks, trace["tracks"]):
+        drafted = checked["tracks"][track.name]
+        links = list(drafted["links"])
+        for url in t_trace.get("doc_urls", []):  # fill up from the brief's pages, best first
+            if len(links) >= trace["max_links"]:
+                break
+            if url in assets and all(l["url"] != url for l in links):
+                links.append({"url": url, "title": assets[url]["title"]})
+        links = links[:trace["max_links"]]
+        diagram = next(({"url": u, "title": assets[u]["title"]} for u in t_trace.get("diagram_urls", []) if u in assets), None)
+        planned_tracks.append({
+            "name": track.name,
+            "discovery": [a.to_dict() for a in track.by_subsection(E.Subsection.discovery.value)],
+            "features": feature_rows(track),
+            "technical_considerations": drafted["technical_considerations"],
+            "integration_design": drafted["integration_design"],
+            "diagram": diagram,
+            "links": links,
+        })
+        links_used.append([l["url"] for l in links])
+        diagrams_used.append(diagram["url"] if diagram else None)
 
-    plan = plan_document(outline, merchant=merchant, introduction=introduction, track={
-        "name": track.name,
-        "discovery": [a.to_dict() for a in track.by_subsection(E.Subsection.discovery.value)],
-        "features": feature_rows(track),
-        "technical_considerations": drafted["technical_considerations"],
-        "integration_design": drafted["integration_design"],
-        "diagram": diagram,
-        "links": links,
-    })
+    plan = plan_document(outline, merchant=merchant, introduction=introduction, tracks=planned_tracks)
     trace["stage"] = "planned"
-    trace["plan"] = {**plan["summary"], "links_used": [l["url"] for l in links], "diagram_url": diagram["url"] if diagram else None,
+    trace["plan"] = {**plan["summary"], "links_used": links_used, "diagram_urls": diagrams_used,
                      "outline_elements": len(req.outline), "requests": len(plan["requests"])}
     gen.trace = trace
     session.flush()
@@ -243,8 +245,7 @@ def plan_proposal(session: Session, settings: AppSettings, run_id: str, req: Pla
         "draft_id": str(gen.generation_id),
         "requests": plan["requests"],
         "summary": plan["summary"],
-        "links": links,
-        "diagram": diagram,
+        "tracks": [{"name": t["name"], "links": t["links"], "diagram": t["diagram"]} for t in planned_tracks],
         "next": "Send the requests unchanged in one Docs batchUpdate on the copy, then call im_proposal_record.",
     }
 
@@ -286,9 +287,9 @@ def record_proposal(session: Session, settings: AppSettings, run_id: str, req: R
                 "open_priority_1": {"count": len(t["open_p1_ids"]),
                                     "questions": [{"id": i, "question": text.get(i, "")} for i in t["open_p1_ids"][:MAX_OPEN_LISTED]]},
                 "feature_rows": t["feature_rows"],
-                "diagram": bool(t.get("diagram_urls")) and trace.get("plan", {}).get("diagram_url") is not None,
+                "diagram": (trace.get("plan", {}).get("diagram_urls") or [None] * (i + 1))[i] is not None,
             }
-            for t in trace["tracks"]
+            for i, t in enumerate(trace["tracks"])
         ],
         "plan": trace.get("plan", {}),
         "leftover_tokens": req.leftover_tokens,

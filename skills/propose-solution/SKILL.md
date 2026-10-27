@@ -21,19 +21,19 @@ running, and stop.
 - **The scope sheet.** Use the one from this chat, or a link the IM gives. If there's neither, ask for the
   link in one short message. Its file ID is the part of the link after `/d/`.
 - **The track tabs.** Read the spreadsheet's tabs (fields `sheets.properties`). The track tabs are the ones
-  whose row 1 starts with `id`. The document holds one track for now: with one track tab, use it; with
-  several, name them and ask the IM in one short message which one this proposal is for.
-- **The columns.** For the chosen tab, read the header row (`'<tab>'!1:1`), column A (`'<tab>'!A:A`) and,
+  whose row 1 starts with `id`. The proposal covers every track tab, in tab order: one block of sections
+  per track in the document (2.1, 2.2, ... and 3.1, 3.2, ...). Don't ask which tab.
+- **The columns.** For each track tab, read the header row (`'<tab>'!1:1`), column A (`'<tab>'!A:A`) and,
   by their header names, the `answer` column and, where the tab has them, `status`, `source` and
   `question`. Count columns from A (the 5th is E). Turn each into one string per row, starting with its
   header cell, with `''` for an empty cell. Never work out which rows are answered yourself.
 
 ## 2. Start the run
 
-Call **`im_proposal_start`** with the sheet's file ID and `tabs`: one entry with the tab's title
-(`name`), its column A (`id_column`) and `columns` (each column you read, keyed by its header name, e.g.
-`{"answer": [...], "status": [...], "source": [...], "question": [...]}`). If the sheet wasn't made by
-`/create-scope`, also pass `merchant_name`.
+Call **`im_proposal_start`** with the sheet's file ID and `tabs`: one entry per track tab, in tab order,
+with the tab's title (`name`), its column A (`id_column`) and `columns` (each column you read, keyed by its
+header name, e.g. `{"answer": [...], "status": [...], "source": [...], "question": [...]}`). If the sheet
+wasn't made by `/create-scope`, also pass `merchant_name`.
 
 It returns a `draft_id`, the merchant, `master_doc_url`, the IM's `proposals_folder_url` if their MCP has
 one configured, the introduction answers, and per track: the
@@ -45,7 +45,7 @@ If it returns an error, tell the IM in one line and stop.
 
 ## 3. Research and draft
 
-Follow the `instructions` in the result. For the track:
+Follow the `instructions` in the result. For each track, from its own brief:
 
 1. Read the brief's pages (use the `.md` links) and research the rest on the documentation site, starting
    from what the requirements need. Every statement about Adyen must come from a page you read.
@@ -59,7 +59,7 @@ Follow the `instructions` in the result. For the track:
    text or leaves the heading for the IM.
 
 The draft is `{introduction: {background: [...], goals: [...]}, tracks: [{name, technical_considerations:
-[...], integration_design: [...], links: [...]}]}` with the track's name exactly as the tab is called.
+[...], integration_design: [...], links: [...]}]}` with one entry per track, named exactly as its tab.
 
 ## 4. Make the document
 
@@ -101,8 +101,8 @@ The draft is `{introduction: {background: [...], goals: [...]}, tracks: [{name, 
 Keep it short:
 
 - the document, as a link on its name;
-- what was filled: the Discovery table rows and the Features table rows, the two solution subsections, the diagram (or that
-  none matched this track and the placeholder was removed), the documentation links;
+- what was filled, per track: the Discovery and Features table rows, the two solution subsections, the
+  diagram (or that none matched the track), the documentation links;
 - one line on where the answers came from: how many were the IM's own and how many came from merchant
   material (`suggested_used`). Don't list the IDs and don't ask for confirmation: the IM changes anything
   by asking, or in the sheet or the document;

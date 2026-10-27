@@ -172,7 +172,20 @@ class FakeDoc:
     def _check_insert_point(self, index: int) -> None:
         assert 1 <= index < len(self.atoms), f"index {index} is outside the document"
         assert self.atoms[index].kind in ("ch", "img"), f"can't insert at a structural marker (index {index})"
-        assert self.atoms[index - 1].kind not in ("T", "/T", "R"), f"can't insert between table markers (index {index})"
+        assert self.atoms[index - 1].kind not in ("T", "R"), f"can't insert between table markers (index {index})"
+
+    def _insertTable(self, body):
+        """A newline, then a table of empty cells, inserted at the index (as the Docs API does)."""
+        index = body["location"]["index"]
+        self._check_insert_point(index)
+        para = self._paragraph_style_at(index)
+        new = [Atom("ch", "\n", {}, dict(para)), Atom("T")]
+        for _ in range(body["rows"]):
+            new.append(Atom("R"))
+            for _ in range(body["columns"]):
+                new += [Atom("C"), Atom("ch", "\n", {}, {"style": "NORMAL_TEXT"})]
+        new.append(Atom("/T"))
+        self.atoms[index:index] = new
 
     def _insertInlineImage(self, body):
         index = body["location"]["index"]

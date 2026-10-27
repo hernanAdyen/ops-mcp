@@ -51,14 +51,15 @@ def test_plan_fills_the_copy_from_the_draft_and_the_graph(session):
     assert doc.tables()[2] == [["Feature & Functionality", "In Scope"], ["Tokenization", TICK], ["Which payment methods?", "Cards | iDEAL"]]
     assert "Tokens must be migrated before go-live." in paras and "Drop-in with the Sessions flow." in paras
     # links: the draft's first (a known page), then a docs-host page we don't know, then the brief fills up
-    assert [l["url"] for l in out["links"]][:2] == ["https://docs.adyen.com/online-payments/tokenization",
-                                                     "https://docs.adyen.com/online-payments/3d-secure"]
-    assert out["links"][1]["title"] == "docs.adyen.com/online-payments/3d-secure"
-    assert len(out["links"]) <= 8 and paras["Tokenization"]["links"] == {"https://docs.adyen.com/online-payments/tokenization": "Tokenization"}
-    assert out["diagram"] == {"url": "https://img.example.com/tokens.png", "title": "Tokenization flow"}
+    [planned_track] = out["tracks"]
+    assert [l["url"] for l in planned_track["links"]][:2] == ["https://docs.adyen.com/online-payments/tokenization",
+                                                             "https://docs.adyen.com/online-payments/3d-secure"]
+    assert planned_track["links"][1]["title"] == "docs.adyen.com/online-payments/3d-secure"
+    assert len(planned_track["links"]) <= 8 and paras["Tokenization"]["links"] == {"https://docs.adyen.com/online-payments/tokenization": "Tokenization"}
+    assert planned_track["diagram"] == {"url": "https://img.example.com/tokens.png", "title": "Tokenization flow"}
     assert any(p["images"] == ["https://img.example.com/tokens.png"] for p in doc.paragraphs())
     trace = session.get(Generation, draft_id).trace
-    assert trace["stage"] == "planned" and trace["plan"]["feature_rows"] == 2 and trace["plan"]["diagram_url"].endswith("tokens.png")
+    assert trace["stage"] == "planned" and trace["plan"]["feature_rows"] == 2 and trace["plan"]["diagram_urls"][0].endswith("tokens.png")
     assert "Tokens must be migrated" not in json.dumps(trace)  # the draft is never stored
 
 
@@ -98,14 +99,31 @@ def test_plan_refuses_bad_drafts_and_mismatched_tabs(session):
         plan_proposal(session, SETTINGS, "00000000-0000-0000-0000-000000000000", PlanRequest(tabs=ONE_TAB, draft=Draft(**DRAFT), outline=outline))
 
 
-def test_several_tracks_are_refused_for_now(session):
+def test_two_tracks_fill_the_template_and_add_a_block(session):
     embedder = FakeEmbedder()
-    setup(session, embedder)
-    tabs = [tab("Online", ["ID-0001"], ["UK"]), tab("In-store", ["ID-0002"], ["S1F2"])]
+    tracks = [{"name": "Online", "channels": ["ECOM"], "pillars": [], "categories": [], "platforms": []},
+              {"name": "In-store", "channels": ["IPP"], "pillars": [], "categories": [], "platforms": []}]
+    setup(session, embedder, tracks=tracks)
+    tabs = [tab("Online", ["ID-0083", "ID-0001", "ID-0003"], ["Background here", "UK", "yes"]),
+            tab("In-store", ["ID-0002", "ID-0004"], ["S1F2 terminals", "yes"])]
     draft_id = started(session, embedder, tabs=tabs)
-    draft = {"tracks": [{"name": "Online"}, {"name": "In-store"}]}
-    with pytest.raises(RunError, match="one track so far"):
-        plan_proposal(session, SETTINGS, draft_id, PlanRequest(tabs=tabs, draft=Draft(**draft), outline=master().outline()))
+    draft = {"introduction": {"background": ["Two tracks."], "goals": []},
+             "tracks": [{"name": "Online", "technical_considerations": ["Online point."], "integration_design": ["Drop-in."],
+                         "links": ["https://docs.adyen.com/online-payments/tokenization"]},
+                        {"name": "In-store", "technical_considerations": ["Store point."], "integration_design": ["Terminal API."],
+                         "links": ["https://docs.adyen.com/point-of-sale/tipping"]}]}
+    doc = master()
+    out = plan_proposal(session, SETTINGS, draft_id, PlanRequest(tabs=tabs, draft=Draft(**draft), outline=doc.outline()))
+    doc.apply(out["requests"])
+    assert "{{" not in doc.text()
+    h2 = [p["text"] for p in doc.paragraphs() if p["style"] == "HEADING_2"]
+    assert h2 == ["1.4 Project Background", "1.5 Project Goals & Objectives", "2.1 Online Scope", "2.2 In-store Scope",
+                  "3.1 Online Solution", "3.2 In-store Solution"]
+    assert [t["name"] for t in out["tracks"]] == ["Online", "In-store"]
+    assert out["tracks"][1]["diagram"]["url"] == "https://img.example.com/tipping.png"
+    assert out["summary"]["tracks"] == 2 and out["summary"]["blocks_added"] == 2
+    texts = [p["text"] for p in doc.paragraphs()]
+    assert "Store point." in texts and "Terminal API." in texts and "Tipping" in texts
 
 
 def test_record_finishes_the_run_and_points_at_the_document(session):

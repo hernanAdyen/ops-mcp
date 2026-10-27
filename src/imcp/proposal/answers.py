@@ -37,11 +37,15 @@ class Answer:
 
     @property
     def display(self) -> str:
-        """The answer as it reads in a document: a toggle's TRUE/FALSE becomes Yes/No."""
+        """The answer as it reads in a document: a toggle's yes/no, or any TRUE/FALSE from a sheet
+        checkbox (also on NEW- rows), becomes Yes/No."""
         if self.type == E.QuestionType.toggle.value:
             scope = in_scope(self)
             if scope is not None:
                 return "Yes" if scope else "No"
+        value = self.answer.strip().casefold()
+        if value in ("true", "false"):
+            return "Yes" if value == "true" else "No"
         return self.answer
 
     def to_dict(self) -> dict:

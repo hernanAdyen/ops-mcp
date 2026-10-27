@@ -163,9 +163,13 @@ The one command where the IM's own model writes: the server makes no chat model 
 5. The skill sends the batch unchanged and calls `im_proposal_record`, which records the run and a
    `source` row of type proposal pointing at the document, for ingestion later.
 
-One track per document for now. The master may carry a second block for a further track (a level-2
-heading with `{{Track}}`); with one track the plan removes it whole, keeping the newline before the next
-section's table because the Docs API won't delete it. Duplicating that block per further track is next.
+Tracks and blocks: the block whose level-2 heading carries `{{Track}}` is the template; any other block in
+sections 2 and 3 (the master's project-level "2.1 Project Scope" block) is removed whole, keeping the
+newline before the next section's table because the Docs API won't delete it. Track 1 fills the template
+in place, with its headings renumbered to 2.1 and 3.1 and named after the track. Each further track gets
+a block rebuilt from the template by index (`BlockWriter`: headings, paragraphs, tables, the image, the
+links, written forwards from the empty paragraph that ends the template block), numbered 2.2, 3.2 and so
+on. With one track the headings read "Project".
 
 ## 5. Code map
 
@@ -188,7 +192,7 @@ section's table because the Docs API won't delete it. Duplicating that block per
 | `src/imcp/proposal/brief.py` | The research brief: requirements, `nearest_assets` for doc pages and diagrams, known designs, instructions |
 | `src/imcp/proposal/outline.py` | The document outline the skill passes, and the checks that its indexes line up |
 | `src/imcp/proposal/draft.py` | Checking the IM's model's draft: sections, lengths, links against asset nodes or the docs host |
-| `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, the Discovery and Features tables, diagram, links). A two-column table in the master (header row + one empty body row) is filled by reusing the empty row and inserting the rest below it |
+| `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, the Discovery and Features tables, diagram, links), one block per track: the `{{Track}}` block is the template, other blocks are removed, further tracks are written from the template by index. A two-column table in the master (header row + one empty body row) is filled by reusing the empty row and inserting the rest below it |
 | `src/imcp/proposal/runs.py` | `/propose-solution` start, plan and record |
 | `src/imcp/app/proposal_api.py` | `POST /proposal/runs`, `/proposal/runs/{id}/doc-plan`, `/proposal/runs/{id}/record` |
 | `src/imcp/db/` | Tables (`models.py`), enums and the session helpers. Migrations are in `migrations/` |

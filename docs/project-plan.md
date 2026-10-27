@@ -20,16 +20,16 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/create-
 | 4 | `/source-scope-answers` | Answers from any merchant material, written into Project Scope; review in the sheet; jobs for slow runs; consent before sharing new questions |
 | 4+ | Smaller `/create-scope` batch | No sort when the master is in order (the master is now sorted by subsection, priority, ID) |
 | 5 | Project tracks | A scope has one or more tracks, named by the IM at the start of `/create-scope`, each with its own tags and its own tab (title = track name); the Introduction and Suggested additions in the first tab only; `/source-scope-answers` runs per tab; tracks kept on the opportunity (migration 0004); `im_scope_start` is a job (`im_scope_wait`) |
-| 7 | `/propose-solution` (one track) | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left |
+| 7 | `/propose-solution` | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left. Several tracks (one block each, built from the `{{Track}}` template) built later that day, not yet run on a real document |
 | 6 | Embeddings and the doc page loader | `EmbeddingClient` (OpenAI-compatible `/embeddings`, called by the server with its own key; `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` fall back to the chat model's); `node.embedding` takes any size (migration 0005), each node records its model, no normalising, cosine distance, exact search; `im_graph_load_docs` reads the Adyen docs index (`DOCS_INDEX_URL`, `llms.txt`) and the rules file `data/graph/adyen-doc-pages.csv` (about 950 of 1,300 non-payment-method pages) and loads one asset node per page: link, title, one-line description, tags, embedding, never the content; dry run then apply, deprecate not delete, `ingestion_run` recorded; `nearest_assets` search. Not yet run against the live index with a real embedding model |
 
 ## Next
 
-1. **The block for further tracks:** `im_proposal_plan` takes one track today. The owner's master keeps
-   a second block ("2.2 {{Track}} - Scope", "3.2 {{Track}} - Proposed Solution") that the one-track plan
-   removes; for several tracks it is the template to duplicate, by index, once per further track
-   (headings, paragraphs, a table). Decide first whether 2.1/3.1 stay a project-level block or become
-   track 1.
+1. **Run a two-track proposal on a real document** (the test sheet with US and FR tabs). Built
+   2026-10-27: the `{{Track}}` block is the template, the project-level 2.1/3.1 blocks are removed (the
+   owner's decision), track 1 fills the template renumbered to 2.1/3.1, further tracks get blocks written
+   from the template by index. Things to confirm on the real API: `insertTable` geometry and the heading
+   styles of written paragraphs.
 2. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
    SVG). Loader built and run with one stand-in.
 3. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
@@ -51,6 +51,24 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/create-
 - A `documents.get` of the master is 120 KB of JSON; the skill derives the outline (97 elements, 8 KB)
   and the server's contiguity and table checks accepted it first time.
 - Docs can't insert SVG images: the diagram URLs must be PNG, JPEG or GIF.
+
+### Learned on the first two-track run (2026-10-27, Domino's test sheet, US + FR)
+
+- The owner's master keeps a `{{Discovery}}` paragraph next to each Discovery table. The plan now
+  empties that paragraph when it fills the table, and a further track's block writes the answers once,
+  in the table, never as paragraphs as well.
+- `insertTable` adds its own newline, so an empty template paragraph before a table isn't written
+  again; nor is the empty paragraph that ends the template block (the insertion point stays as the
+  separator). A removed block followed by a paragraph is deleted whole, newline included; only a block
+  followed by a table (a section title) leaves one empty paragraph behind.
+- A sheet checkbox writes TRUE/FALSE on NEW- rows too; those now read Yes/No in the document.
+- The 302-request batch (two tables of 18 and 4 rows built from scratch, an image, two bullet lists,
+  two block removals) was accepted first time: the computed table geometry matches the live API.
+- The master's 2.2.1 Discovery table header read "Question | In Scope"; the plan requires "Answer".
+  Fixed in the copy by hand for this run; the master needs the same fix.
+- The template solution block has no 3.x.1 heading, so neither does any track's block: the
+  considerations follow the block heading. Adding "3.2.1 Technical Considerations" to the master's
+  template block fixes it for every run.
 
 ## /propose-solution design (agreed so far, 2026-10-26)
 

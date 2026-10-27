@@ -74,6 +74,14 @@ def test_toggle_answers_read_yes_or_no_in_the_document():
     assert track.answers[0].answer == "TRUE"  # the sheet's value is kept for the search text and the trace
 
 
+def test_a_checkbox_value_on_any_row_reads_yes_or_no():
+    # a NEW- row has no bank type; the sheet's checkbox still writes TRUE/FALSE
+    new_rows = {"NEW-0001": "Do you need offline payments?", "NEW-0002": "Any surcharging?"}
+    track = pick_answers("T", list(new_rows) + ["ID-0001"],
+                         {"answer": ["TRUE", "false", "UK"], "question": list(new_rows.values()) + [""]}, BANK)
+    assert [a.to_dict()["answer"] for a in track.answers] == ["Yes", "No", "UK"]
+
+
 def test_in_scope_values():
     mk = lambda v: SimpleNamespace(answer=v)  # noqa: E731
     assert in_scope(mk("Yes")) is True and in_scope(mk(" TRUE ")) is True and in_scope(mk("✓")) is True
