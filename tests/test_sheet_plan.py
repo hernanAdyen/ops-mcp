@@ -5,7 +5,7 @@ import pytest
 
 from imcp.db import enums as E
 from imcp.scope.sheet_plan import (FOUND_BY, RowInfo, SheetPlanError, TrackEdit, layout_requests, new_sheet_ids,
-                                   out_of_order, plan_sheet_edit, plan_tracks, sort_key)
+                                   out_of_order, plan_call_prompt_tab, plan_sheet_edit, plan_tracks, sort_key)
 
 TAB = 2039431867
 COLS = 12
@@ -141,6 +141,13 @@ class FakeBook:
                 self.titles[new] = body["newSheetName"]
             elif kind == "updateSheetProperties" and "title" in body["properties"]:
                 self.titles[body["properties"]["sheetId"]] = body["properties"]["title"]
+            elif kind == "addSheet":
+                props = body["properties"]
+                assert props["sheetId"] not in self.tabs, f"sheetId {props['sheetId']} is taken"
+                grid = props["gridProperties"]
+                self.tabs[props["sheetId"]] = FakeTab([""] * grid["rowCount"], width=grid["columnCount"], tab=props["sheetId"])
+                self.order.insert(props.get("index", len(self.order)), props["sheetId"])
+                self.titles[props["sheetId"]] = props["title"]
             else:
                 self.tabs[sheet_id_of(body)].apply([r])
         return self
@@ -435,3 +442,17 @@ def test_tracks_are_checked_before_anything_is_planned():
         plan_tracks(TAB, [TAB], COLS, column, [TrackEdit("A", {"ID-0001": "t"}), TrackEdit("a", {"ID-0002": "t"})], INFO)
     with pytest.raises(SheetPlanError, match="sheet_ids"):
         plan_tracks(TAB, [], COLS, column, [TrackEdit("A", {"ID-0001": "t"}), TrackEdit("B", {"ID-0002": "t"})], INFO)
+
+
+def test_call_prompt_tab_requests():
+    reqs = plan_call_prompt_tab(1002, "Answer these questions...\n\nID-0001: Regions?", index=2)
+    assert [next(iter(r)) for r in reqs] == ["addSheet", "updateCells", "updateDimensionProperties"]
+    props = reqs[0]["addSheet"]["properties"]
+    assert props == {"sheetId": 1002, "title": "Call prompt", "gridProperties": {"rowCount": 3, "columnCount": 1}, "index": 2}
+    cell = reqs[1]["updateCells"]["rows"][0]["values"][0]
+    assert cell["userEnteredValue"]["stringValue"].startswith("Answer these") and cell["userEnteredFormat"]["wrapStrategy"] == "WRAP"
+    assert reqs[1]["updateCells"]["range"]["sheetId"] == 1002
+    assert "index" not in plan_call_prompt_tab(5, "x")[0]["addSheet"]["properties"]
+    # a FakeBook plays it: a new tab with the prompt in A1
+    book = FakeBook({7: FakeTab(["id"], width=12, tab=7)}, {7: "Project Scope"}).apply(reqs)
+    assert book.titles[1002] == "Call prompt" and book.order == [7, 1002] and book.tabs[1002].rows[0][0].startswith("Answer these")

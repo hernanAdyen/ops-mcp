@@ -110,7 +110,8 @@ block of sections per track.
 ### /create-scope
 
 1. The skill asks the IM for the merchant, the tracks (one short message; "one" is the usual answer),
-   tags (one question card per track) and notes.
+   tags (one question card per track: channels, pillars, categories; the first card also asks whether
+   they want the call-notes prompt in the sheet) and notes.
 2. `im_scope_start` (a job: `im_scope_wait` until it's done): per track, the server selects questions
    by tags; our model adds questions for topics in the notes, told which track it is choosing for, and
    drafts a question for each topic the bank doesn't cover (once, for the project). A draft run is saved.
@@ -120,9 +121,13 @@ block of sections per track.
    duplicates it once per further track (before any row is touched, so each tab starts from the same
    rows), and in each tab deletes the rows not in that track, adds `found_by`, orders and groups the
    rows by section, adds **Suggested additions** at the end of the first tab, and keeps the master's filter.
+   If the IM wanted the call-notes prompt, the batch also adds a `Call prompt` tab with the prompt text
+   in it, so the IM copies it from the sheet and nothing long passes through chat.
 5. The skill sends the batch, reads column A of every track tab back, asks consent if there are new
    questions, and calls `im_scope_record`: the read-back check per tab, the deal with its tracks, the
-   review queue and a call-notes prompt grouped by track.
+   review queue, and a link to the `Call prompt` tab (or the prompt text, when no tab was made).
+   The copy goes into the IM's own folder when their MCP config names one (`PROPOSALS_DRIVE_FOLDER_URL`
+   in `McpSettings`, returned by the start tools as `proposals_folder_url`).
 
 ### /source-scope-answers
 

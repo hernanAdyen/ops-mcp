@@ -422,3 +422,29 @@ def test_health_can_check_the_model(connection):
     assert body["model"] == {"ok": True, "model": "fake-model", "latency_ms": 1}
     body = api(connection, model=None).get("/health", params={"check_model": "true"}).json()
     assert body["model"]["ok"] is False
+
+
+# --- the call prompt as a tab of the sheet ------------------------------------------------------
+
+def test_plan_can_add_a_call_prompt_tab_and_record_links_to_it(session):
+    out, _ = two_tracks(session)
+    planned, book = plan_two(session, out["draft_id"], call_prompt=True, call_prompt_priorities=[])
+    tab = planned["call_prompt_tab"]
+    assert tab["name"] == "Call prompt" and tab["tab_sheet_id"] == 1002 and tab["questions"] == 6
+    assert book.titles[1002] == "Call prompt" and book.order == [7, 1001, 1002]  # after the track tabs
+    text = book.tabs[1002].rows[0][0]
+    assert text.startswith("Answer these scoping questions") and "Track: Capital" in text and "Track: In-person UK" in text
+    assert text.count("ID-0003:") == 2
+    tabs = [{"name": book.titles[sid], "sheet_question_ids": [v or "" for v in book.tabs[sid].column(0)]} for sid in (7, 1001)]
+    rec = record(session, out["draft_id"], tabs=tabs)
+    assert rec["ok"]
+    assert rec["call_prompt"] == {"tab": "Call prompt", "url": "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjK#gid=1002",
+                                  "questions": 6, "left_out": 0, "priorities": "all"}
+    assert session.get(Generation, out["draft_id"]).trace["call_prompt_tab"]["tab_sheet_id"] == 1002
+
+
+def test_without_the_prompt_tab_the_plan_adds_nothing(session):
+    out, _ = two_tracks(session)
+    planned, book = plan_two(session, out["draft_id"])
+    assert planned["call_prompt_tab"] is None and book.order == [7, 1001]
+    assert not any("addSheet" in r for r in planned["requests"])

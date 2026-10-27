@@ -82,6 +82,9 @@ class AppSettings(_Base):
 class McpSettings(_Base):
     APP_SERVER_URL: AnyHttpUrl = AnyHttpUrl("http://localhost:8787")
     FEEDBACK_FORM_URL: AnyHttpUrl | None = None
+    # The IM's own Drive folder for scope sheets and proposals. Set per IM in their MCP config; the
+    # skills copy into it without searching Drive. Unset: the skills look for a SolutionProposals folder.
+    PROPOSALS_DRIVE_FOLDER_URL: AnyHttpUrl | None = None
     # Folder the bank-load tool may read CSVs from. Default: the repo's data/ folder (git-ignored).
     IMCP_DATA_DIR: Path | None = None
     # Folder /source-scope-answers may read merchant material from. Default: the repo's inputs/ (git-ignored).

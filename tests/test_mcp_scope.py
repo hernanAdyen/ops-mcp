@@ -5,6 +5,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from imcp.config import McpSettings
 from imcp.mcp_server import build_server
 from tests.test_health import _tool_text
 
@@ -151,3 +152,26 @@ async def test_health_can_ask_for_a_model_check():
 async def test_unknown_tag_values_are_refused_by_the_tool():
     with pytest.raises(Exception):
         await server_for([]).call_tool("im_scope_start", {"channels": ["POS"]})
+
+
+@pytest.mark.anyio
+async def test_sheet_plan_passes_the_call_prompt_choice():
+    received = []
+    await server_for(received).call_tool("im_scope_sheet_plan", {
+        "draft_id": RUN, "tab_sheet_id": 7, "column_count": 12, "id_column": ["id"], "call_prompt": True,
+        "call_prompt_priorities": []})
+    assert received[0][2]["call_prompt"] is True and received[0][2]["call_prompt_priorities"] == []
+    received.clear()
+    await server_for(received).call_tool("im_scope_sheet_plan", {"draft_id": RUN, "tab_sheet_id": 7, "column_count": 12, "id_column": ["id"]})
+    assert received[0][2]["call_prompt"] is False and received[0][2]["call_prompt_priorities"] == [1]
+
+
+@pytest.mark.anyio
+async def test_start_result_carries_the_ims_folder_when_configured():
+    received = []
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=stub(received)), base_url="http://app.test")
+    with_folder = build_server(McpSettings(PROPOSALS_DRIVE_FOLDER_URL="https://drive.google.com/drive/folders/FOLDER"), client=client)
+    data = json.loads(_tool_text(await with_folder.call_tool("im_scope_start", {"merchant_name": "Example Co"})))
+    assert data["proposals_folder_url"] == "https://drive.google.com/drive/folders/FOLDER" and data["draft_id"] == RUN
+    without = json.loads(_tool_text(await server_for([]).call_tool("im_scope_start", {"merchant_name": "Example Co"})))
+    assert "proposals_folder_url" not in without

@@ -142,18 +142,22 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
     def run_path(draft_id: str, step: str, base: str = "/scope/runs") -> str:
         return f"{base}/{uuid.UUID(draft_id)}/{step}"  # a bad ID raises before any request is made
 
-    async def post(path: str, body: dict, timeout: float = 30, compact: bool = False) -> str:
+    # The IM's own settings the skills need: added to the results of the start tools.
+    local = {"proposals_folder_url": str(settings.PROPOSALS_DRIVE_FOLDER_URL)} if settings.PROPOSALS_DRIVE_FOLDER_URL else {}
+
+    async def post(path: str, body: dict, timeout: float = 30, compact: bool = False, extra: dict | None = None) -> str:
         try:
             res = await call("POST", path, body, timeout=timeout)
         except Exception as exc:
             return unreachable(exc)
         if res.status_code != 200:
             return f"The app server refused this (HTTP {res.status_code}): {res.text[:4000]}"
+        data = {**res.json(), **(extra or {})}
         if compact:
-            return json.dumps(res.json(), ensure_ascii=False, separators=(",", ":"))
-        return json.dumps(res.json(), indent=2, ensure_ascii=False)
+            return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        return json.dumps(data, indent=2, ensure_ascii=False)
 
-    async def job_reply(method: str, path: str, body: dict | None = None) -> str:
+    async def job_reply(method: str, path: str, body: dict | None = None, extra: dict | None = None) -> str:
         """A job on the app server: its result, or pending with the job ID to ask again with."""
         wait_tool = {"/scope/": "im_scope_wait", "/graph/": "im_graph_wait"}.get(path[:7], "im_answers_wait")
         try:
@@ -166,7 +170,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         if data.get("pending"):
             return json.dumps({"pending": True, "job_id": data["job_id"],
                                "next": f"Our model is still working. Call {wait_tool} with this job_id."})
-        return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        return json.dumps({**data, **(extra or {})}, ensure_ascii=False, separators=(",", ":"))
 
     @server.tool(
         name="im_health",
@@ -181,7 +185,8 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         try:
             params = {"check_model": "true"} if check_model else None
             res = await call("GET", "/health", timeout=60 if check_model else 5, params=params)
-            return json.dumps(res.json(), indent=2)
+            mcp = {"proposalsFolder": bool(settings.PROPOSALS_DRIVE_FOLDER_URL), "feedbackForm": bool(settings.FEEDBACK_FORM_URL)}
+            return json.dumps({**res.json(), "mcp": mcp}, indent=2)
         except Exception as exc:
             return unreachable(exc)
 
@@ -249,7 +254,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         }
         body = {"tags": tags, "tracks": [t.body() for t in tracks or []], "context": context,
                 "merchant_name": merchant_name}
-        return await job_reply("POST", "/scope/jobs", body)
+        return await job_reply("POST", "/scope/jobs", body, extra=local)
 
     @server.tool(
         name="im_scope_wait",
@@ -264,7 +269,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             uuid.UUID(job_id)
         except ValueError:
             return "job_id should be the job_id returned by im_scope_start."
-        return await job_reply("GET", f"/scope/jobs/{job_id}")
+        return await job_reply("GET", f"/scope/jobs/{job_id}", extra=local)
 
     @server.tool(
         name="im_scope_sheet_plan",
@@ -275,8 +280,10 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "header row (row 1, as read), the tab's basicFilter exactly as read if it has one (basic_filter), "
             "sheet_ids (every tab's sheetId in the copy, in tab order; needed with several tracks), and the IM's "
             "changes: remove_ids and add_ids apply to every track; `tracks` holds changes to one track only "
-            "(by name). NEW- IDs can be removed too. Returns `requests`: send them unchanged, in one Sheets batch "
-            "update on the copy. They rename the Project Scope tab to the first track, make a tab per further "
+            "(by name). NEW- IDs can be removed too. With call_prompt=true the batch also adds a 'Call prompt' tab "
+            "holding the call-notes prompt (priority-1 questions unless call_prompt_priorities says otherwise, [] "
+            "for all), so the IM copies it from the sheet. Returns `requests`: send them unchanged, in one Sheets "
+            "batch update on the copy. They rename the Project Scope tab to the first track, make a tab per further "
             "track, and in each tab delete the rows that aren't in that track, add a found_by column, order and "
             "group the rows by section, and keep the tab's filter. Never compute row numbers yourself."
         ),
@@ -292,12 +299,16 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         remove_ids: list[str] | None = None,
         add_ids: list[str] | None = None,
         tracks: list[TrackChangesArg] | None = None,
+        call_prompt: bool = False,
+        call_prompt_priorities: list[Literal[1, 2, 3]] | None = None,
     ) -> str:
         body = {
             "tab_sheet_id": tab_sheet_id, "column_count": column_count, "id_column": id_column,
             "header_row": header_row or [], "basic_filter": basic_filter or None, "sheet_ids": sheet_ids or [],
             "remove_ids": remove_ids or [], "add_ids": add_ids or [],
             "tracks": [t.model_dump() for t in tracks or []],
+            "call_prompt": call_prompt,
+            "call_prompt_priorities": [1] if call_prompt_priorities is None else call_prompt_priorities,
         }
         try:
             path = run_path(draft_id, "sheet-plan")
@@ -313,10 +324,10 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "column A of every track's tab read back after the edit (`tabs`, each with the tab's title; for a "
             "one-track scope, sheet_question_ids alone is fine). Records the run and the tracks, checks each tab "
             "against its track and returns a summary (counts by subsection and by how each question was found, "
-            "per track), any mismatches, a call_prompt (the scope's questions by ID, grouped by track, for the IM "
-            "to paste into their call-notes tool; priority 1 unless call_prompt_priorities says otherwise, [] for "
-            "all) and the feedback form link to show the IM. Pass share_new_questions=true only if the IM agreed "
-            "to share drafted questions for review."
+            "per track), any mismatches, the call_prompt (a link to the sheet's 'Call prompt' tab when the plan made "
+            "one, else the prompt text; priority 1 unless call_prompt_priorities says otherwise, [] for all) and the "
+            "feedback form link to show the IM. Pass share_new_questions=true only if the IM agreed to share drafted "
+            "questions for review."
         ),
     )
     async def im_scope_record(
@@ -454,7 +465,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
                                 max_links: int = 8) -> str:
         body = {"sheet_id": sheet_id, "merchant_name": merchant_name, "max_links": max_links,
                 "tabs": [t.model_dump() for t in tabs]}
-        return await post("/proposal/runs", body, timeout=90, compact=True)
+        return await post("/proposal/runs", body, timeout=90, compact=True, extra=local)
 
     @server.tool(
         name="im_proposal_plan",

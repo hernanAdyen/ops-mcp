@@ -261,6 +261,26 @@ class TrackEdit:
     additions: list[dict] | None = None
 
 
+CALL_PROMPT_TAB = "Call prompt"
+CALL_PROMPT_WIDTH = 900  # pixels: wide enough to read the prompt without scrolling sideways
+
+
+def plan_call_prompt_tab(sheet_id: int, text: str, index: int | None = None, title: str = CALL_PROMPT_TAB) -> list[dict]:
+    """A new tab holding the call-notes prompt in A1, so the IM copies it from the sheet instead of chat."""
+    properties: dict = {"sheetId": sheet_id, "title": title, "gridProperties": {"rowCount": 3, "columnCount": 1}}
+    if index is not None:
+        properties["index"] = index
+    return [
+        {"addSheet": {"properties": properties}},
+        {"updateCells": {"range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 1},
+                         "rows": [{"values": [{"userEnteredValue": {"stringValue": text},
+                                               "userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}}]}],
+                         "fields": "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment"}},
+        {"updateDimensionProperties": {"range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1},
+                                       "properties": {"pixelSize": CALL_PROMPT_WIDTH}, "fields": "pixelSize"}},
+    ]
+
+
 def new_sheet_ids(existing: Iterable[int], n: int, start: int = 1001) -> list[int]:
     """Numeric sheetIds for new tabs that don't clash with the copy's own tabs."""
     taken, out, candidate = set(existing), [], start

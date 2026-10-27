@@ -68,3 +68,9 @@ def test_describe_config_never_reveals_values():
 
 def test_mcp_default_app_url():
     assert str(McpSettings().APP_SERVER_URL).startswith("http://localhost:8787")
+
+
+def test_mcp_folder_setting_is_optional():
+    assert McpSettings().PROPOSALS_DRIVE_FOLDER_URL is None
+    s = McpSettings(PROPOSALS_DRIVE_FOLDER_URL="https://drive.google.com/drive/folders/FOLDER")
+    assert str(s.PROPOSALS_DRIVE_FOLDER_URL).endswith("/folders/FOLDER")

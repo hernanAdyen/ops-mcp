@@ -92,7 +92,9 @@ MCP health check: it should reach the app server and the database.
 
 Optional settings for the MCP go in an `"env"` block next to `"args"`: `APP_SERVER_URL` (default
 `http://localhost:8787`), `IMCP_DATA_DIR` and `IMCP_INPUTS_DIR` (default the repo's `data/` and
-`inputs/`).
+`inputs/`), and `PROPOSALS_DRIVE_FOLDER_URL`, the link to your own Drive folder for scope sheets and
+proposals (the skills copy straight into it; without it they look for a `SolutionProposals` folder in
+My Drive and create one if needed).
 
 ## 4. Add the skills
 

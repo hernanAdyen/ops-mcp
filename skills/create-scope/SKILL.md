@@ -28,20 +28,23 @@ only for what's missing.
   and in-store, or two countries? If so, what are they called? Say that one track is the usual answer.
   "One", "no" or no tracks named means one track, called Project Scope. Up to 6 tracks. A track name
   becomes a tab title, so it can't contain `[ ] * ? : / \`. Use the IM's names as they gave them.
-- **Tags.** Ask with one question card (AskUserQuestion) **per track**, all questions multi-select.
-  With several tracks, name the track in each question ("Channels for Ecommerce US?"). Leave out any
-  question the IM already answered. Put "All" first in every question.
+- **Tags.** Ask with one question card (AskUserQuestion) **per track**, three multi-select questions:
+  channels, pillars and categories. With several tracks, name the track in each question ("Channels for
+  Ecommerce US?"). Leave out any question the IM already answered. Put "All" first in every question.
   - Channels: All, ECOM, IPP, MOTO
   - Pillars: All, DIGITAL, PFS, UC
-  - Subsections: All, Introduction, Discovery, Features & Functionality
-  - Categories: All, Payments (PAYIN, PAYOUT), Platforms (KYC, PAYFAC, CASHOUT),
+  - Categories (the bank's `category` column; a card holds four options, so they come in groups):
+    All, Payments (PAYIN, PAYOUT), Onboarding & payouts (KYC, PAYFAC, CASHOUT),
     Capital & reporting (CAPITAL, REPORTING_RECONCILIATION). Mention that exact categories can be
     typed in Other.
   - "All", or every option of a question selected, means no filter on that tag: pass an empty list.
     Each category group means all the categories in it.
-  - Priorities and platforms aren't asked: don't filter on them, unless the IM gave them in the
-    command (e.g. `/create-scope Acme, BALANCE, P1 only`).
-  - Pass subsections as `introduction`, `discovery`, `features_functionality`, and priorities as 1, 2, 3.
+  - Subsections, priorities and platforms aren't asked: don't filter on them, unless the IM gave them
+    in the command (e.g. `/create-scope Acme, BALANCE, P1 only`, or "discovery only"). Pass subsections
+    as `introduction`, `discovery`, `features_functionality`, and priorities as 1, 2, 3.
+  - On the **first track's card** add a fourth question: "Add a call-notes prompt to the sheet, to
+    paste into Gong after a call?" with the options "Yes, priority-1 questions", "Yes, all questions"
+    and "No". Remember the answer for the plan (`call_prompt`, `call_prompt_priorities`).
 - **Context.** After the cards, unless the IM already gave it, ask in one short chat message for their
   notes on the merchant (e.g. "launching Capital for their sellers, migrating tokens from their current
   PSP"), or "none". The notes cover the whole project; the server uses them for every track. A card
@@ -58,7 +61,8 @@ direct tags. If it returns `pending` with a `job_id` (our model is still working
 with that `job_id`, again if it is still pending, until you get the result. Never call `im_scope_start`
 twice for the same scope.
 
-It returns a `draft_id`, `master_sheet_url`, and per track (`tracks`): counts of the tag matches, the
+It returns a `draft_id`, `master_sheet_url`, the IM's `proposals_folder_url` if their MCP has one
+configured, and per track (`tracks`): counts of the tag matches, the
 questions our model added by topic (each with a reason) and topics no bank question covers. The
 `gap_questions` (IDs like NEW-0001) are drafted for topics no bank question covers; they go under
 **Suggested additions** at the end of the first tab. If it returns an error, tell the IM in one line
@@ -84,9 +88,10 @@ to every track. If there are neither, go straight on.
 
 ## 4. Build the sheet
 
-1. **Folder.** Search Drive for a folder titled `SolutionProposals` in My Drive
-   (`title = 'SolutionProposals' and mimeType = 'application/vnd.google-apps.folder' and parentId = 'root'`).
-   If there isn't one, create it there.
+1. **Folder.** If `im_scope_start` returned `proposals_folder_url`, use that folder (its ID is the part
+   after `/folders/`) without searching. Otherwise search Drive for a folder titled `SolutionProposals`
+   in My Drive (`title = 'SolutionProposals' and mimeType = 'application/vnd.google-apps.folder' and
+   parentId = 'root'`), and create it there if there isn't one.
 2. **Name.** `<merchant name> <YYYY-MM-DD HHmm>`, using the current date and time where the IM is.
 3. **Copy** the master bank into that folder with that name. Its file ID is the part of
    `master_sheet_url` after `/d/`. Never edit the master itself.
@@ -97,12 +102,13 @@ to every track. If there are neither, go straight on.
    with the `id` header, with `''` for an empty row. Also read the **header row**: `'Project Scope'!1:1`.
 6. Call **`im_scope_sheet_plan`** with the `draft_id`, that `sheetId`, the column count, column A, the
    header row, the tab's `basicFilter` exactly as read (`basic_filter`; leave it out if there's none),
-   `sheet_ids`, and the IM's `remove_ids`, `add_ids` and `tracks` changes. If it refuses (for example an
-   unknown ID), tell the IM and fix that before changing anything.
+   `sheet_ids`, the IM's `remove_ids`, `add_ids` and `tracks` changes, and `call_prompt` true if the IM
+   wanted the call-notes prompt (with `call_prompt_priorities: []` for all questions). If it refuses (for
+   example an unknown ID), tell the IM and fix that before changing anything.
 7. Send the returned **`requests` unchanged, in one Sheets batch update** on the copy. Don't edit,
    reorder, split or recalculate them, and never work out row numbers yourself. The batch renames the
    Project Scope tab to the first track and makes a tab per further track (`new_tabs` says which), then
-   fills each tab from its own track.
+   fills each tab from its own track, and adds the `Call prompt` tab if asked (`call_prompt_tab`).
 8. **Read column A of every track's tab again**, the same way (`'<tab title>'!A:A`). The tab titles are
    the track names from the plan's `tracks`.
 9. **Consent.** If `im_scope_start` said `review_queue_on` and the first tab has drafted questions
@@ -119,7 +125,7 @@ to every track. If there are neither, go straight on.
 Keep it short:
 
 - the sheet, as a link on its name;
-- the tabs: one per track, named after it (with one track, just Project Scope);
+- the tabs: one per track, named after it (with one track, just Project Scope), plus `Call prompt` if asked;
 - per track, the number of questions, by section, and how they were found (tags, topic, added by you);
   each tab is grouped by section, each with a collapsible group;
 - if the plan's `filter` is `kept`: the tabs open with the master's filter on (e.g. P1 only), and
@@ -127,12 +133,11 @@ Keep it short:
 - that the `found_by` column says why each question is there, and the IM can delete rows they don't need;
 - the Suggested additions at the end of the first tab, if any: questions drafted for topics the bank
   doesn't cover. The IM keeps, edits or deletes them in the sheet;
-- the **call-notes prompt** (`call_prompt.text`) in a code block, so the IM can copy it: after a call, they
-  paste it into their call-notes tool (for example Gong's AI) and bring the output to
-  `/source-scope-answers`, which then matches answers to questions by ID. With several tracks it is
-  grouped by track. Say it has the priority-1 questions (`call_prompt.questions`); if they want all of
-  them, call `im_scope_record` again with the same arguments and `call_prompt_priorities: []`, and show
-  the new prompt;
+- if the IM wanted the call-notes prompt: one line with a link to it, **"Call prompt for Gong"** on
+  `call_prompt.url` (the sheet's `Call prompt` tab). After a call they copy it from that tab into their
+  call-notes tool and bring the output to `/source-scope-answers`, which matches answers by ID. Say how
+  many questions it holds (`call_prompt.questions`). Never print the prompt text in chat. If they said
+  no, don't mention it;
 - that `/source-scope-answers` fills the answers from merchant material (that output, notes, a call
   summary, emails) when they have some, one tab at a time;
 - any mismatch `im_scope_record` reports (per track), and what it means;

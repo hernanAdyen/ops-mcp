@@ -35,7 +35,8 @@ Call **`im_proposal_start`** with the sheet's file ID and `tabs`: one entry with
 `{"answer": [...], "status": [...], "source": [...], "question": [...]}`). If the sheet wasn't made by
 `/create-scope`, also pass `merchant_name`.
 
-It returns a `draft_id`, the merchant, `master_doc_url`, the introduction answers, and per track: the
+It returns a `draft_id`, the merchant, `master_doc_url`, the IM's `proposals_folder_url` if their MCP has
+one configured, the introduction answers, and per track: the
 Discovery answers, the Features table rows, the `suggested_used` IDs (answers found by
 `/source-scope-answers` that the IM hasn't confirmed), the open priority-1 questions, and the **brief**:
 the requirements, the nearest documentation pages (each with a `.md` link that is lighter to read), the
@@ -62,9 +63,10 @@ The draft is `{introduction: {background: [...], goals: [...]}, tracks: [{name, 
 
 ## 4. Make the document
 
-1. **Folder.** Search Drive for a folder titled `SolutionProposals` in My Drive
-   (`title = 'SolutionProposals' and mimeType = 'application/vnd.google-apps.folder' and parentId = 'root'`).
-   If there isn't one, create it there.
+1. **Folder.** If `im_proposal_start` returned `proposals_folder_url`, use that folder (its ID is the part
+   after `/folders/`) without searching. Otherwise search Drive for a folder titled `SolutionProposals`
+   in My Drive (`title = 'SolutionProposals' and mimeType = 'application/vnd.google-apps.folder' and
+   parentId = 'root'`), and create it there if there isn't one.
 2. **Copy** the master (`master_doc_url`; its file ID is the part after `/d/`) into that folder, named
    `<merchant name> - Solution Proposal`. Never edit the master itself.
 3. **Read the copy** with the Docs connector. Take its body: `body.content` (if the document has tabs, the
