@@ -20,25 +20,23 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/ops-cre
 | 4 | `/ops-answer-scope` | Answers from any merchant material, written into Project Scope; review in the sheet; jobs for slow runs; consent before sharing new questions |
 | 4+ | Smaller `/ops-create-scope` batch | No sort when the master is in order (the master is now sorted by subsection, priority, ID) |
 | 5 | Project tracks | A scope has one or more tracks, named by the IM at the start of `/ops-create-scope`, each with its own tags and its own tab (title = track name); the Introduction and Suggested additions in the first tab only; `/ops-answer-scope` runs per tab; tracks kept on the opportunity (migration 0004); `im_scope_start` is a job (`im_scope_wait`) |
-| 7 | `/ops-create-solution` | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left. Several tracks (one block each, built from the `{{Track}}` template) run twice on the Domino's test sheet (US + FR) the same day: 230 requests, clean document |
+| 7 | `/ops-create-solution` | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left. Several tracks (one block each, built from the `{{Track}}` template) run twice on the Domino's test sheet (US + FR) the same day: 230 requests, clean document. End-to-end pass on a fresh two-track sheet (Slice Street Pizza, US online + FR in-store) 2026-10-27: scope, answers, proposal (201 requests), each track's Discovery table carries its own answers only |
 | 6 | Embeddings and the doc page loader | `EmbeddingClient` (OpenAI-compatible `/embeddings`, called by the server with its own key; `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` fall back to the chat model's); `node.embedding` takes any size (migration 0005), each node records its model, no normalising, cosine distance, exact search; `im_graph_load_docs` reads the Adyen docs index (`DOCS_INDEX_URL`, `llms.txt`) and the rules file `data/graph/adyen-doc-pages.csv` (about 950 of 1,300 non-payment-method pages) and loads one asset node per page: link, title, one-line description, tags, embedding, never the content; dry run then apply, deprecate not delete, `ingestion_run` recorded; `nearest_assets` search. Not yet run against the live index with a real embedding model |
 
 ## Next
 
-1. **One clean end-to-end pass on a fresh sheet** after the master edits of 2026-10-27 (named styles
-   updated, separator paragraphs cleared, 2.2.1 header "Answer", 3.2.1 heading): `/ops-create-scope`,
-   `/ops-answer-scope` with the Gong summary, `/ops-create-solution` with two tracks. Watch the Discovery
-   tables: each track must carry its own answers (the Domino's sheet still holds mixed-track answers
-   from the run before the extraction fixes; the eval case checks exactly this and passes with no
-   leaks, so a fresh `/ops-answer-scope` run is the proof).
-2. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
+1. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
    SVG). Loader built and run with one stand-in.
-3. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
+2. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
    considerations and their edges come from real proposals and the tool improves as more are added.
-4. **Evals:** a second extraction case for the two prose misses (token migration, loyalty);
-   leave-one-out on the reference proposals.
-5. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
+3. **Evals:** a second extraction case for the two prose misses (token migration, loyalty) and for the
+   spurious NEW- question seen on the end-to-end pass (below); leave-one-out on the reference proposals.
+4. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
    the reconciliation page). Load the missing docs sections or let the server fetch a title.
+5. **Master fixes, by the owner:** the 2.2.1 Discovery table header still reads "Question | In Scope"
+   (the plan requires "Answer"), and the empty paragraph before the "3.0 Solution" title table still
+   carries direct formatting (15 pt, grey), which a further track's Discovery table inherits. Both were
+   patched by hand in the copy on every run so far.
 
 Commands renamed 2026-10-27: `/create-scope` → `/ops-create-scope`, `/source-scope-answers` →
 `/ops-answer-scope`, `/propose-solution` → `/ops-create-solution`. New runs are recorded under the new
@@ -76,7 +74,23 @@ names; `/ops-answer-scope` still finds earlier runs recorded under the old one.
   Fixed in the copy by hand for this run; the master needs the same fix.
 - The template solution block has no 3.x.1 heading, so neither does any track's block: the
   considerations follow the block heading. Adding "3.2.1 Technical Considerations" to the master's
-  template block fixes it for every run.
+  template block fixes it for every run (done by the owner the same day).
+
+### Learned on the end-to-end pass (2026-10-27, Slice Street Pizza test sheet, US online + FR in-store)
+
+- `/ops-create-scope` (47 and 56 questions), `/ops-answer-scope` on both tabs from one Gong summary
+  (13 and 17 answers) and `/ops-create-solution` (201 requests) ran clean, with no code changes. The
+  mixed-track answers seen on the Domino's sheet came from the extraction run before the per-track
+  prompt fix: on the fresh sheet each tab holds only its own track's facts.
+- With the master's look in its named styles (Normal, Heading 2, Heading 3), a block built from scratch
+  renders like the master's own block. Tables built from scratch use the Normal size, where the master's
+  tables carry 10 pt as direct formatting; the owner prefers it that way.
+- Extraction wrote a NEW- question (offline sync) on the in-store tab while the bank question that covers
+  it (ID-0070, Offline Processing) stayed empty: the closest-question rule missed. The proposal shows
+  the NEW- row's Yes; the eval needs a case for this.
+- Two online questions (websites, API credentials) reach the in-store tab through the tag filter and
+  show up among its open priority-1 questions. A tag or channel on those bank questions would keep
+  them out.
 
 ## /ops-create-solution design (agreed so far, 2026-10-26)
 
