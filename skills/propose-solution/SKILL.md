@@ -99,7 +99,7 @@ The draft is `{introduction: {background: [...], goals: [...]}, tracks: [{name, 
 Keep it short:
 
 - the document, as a link on its name;
-- what was filled: the Discovery and Features rows, the two solution subsections, the diagram (or that
+- what was filled: the Discovery table rows and the Features table rows, the two solution subsections, the diagram (or that
   none matched this track and the placeholder was removed), the documentation links;
 - the **suggested answers used** (`suggested_used`): answers found from merchant material that the IM
   hasn't confirmed in the sheet. Ask them to confirm those in the sheet or the document;

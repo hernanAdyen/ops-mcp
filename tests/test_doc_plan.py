@@ -90,7 +90,7 @@ def test_the_whole_plan_fills_the_document():
     assert paras["3D Secure 2"]["links"] == {"https://docs.adyen.com/online-payments/3d-secure": "3D Secure 2"}
     assert texts[-1] == "Boilerplate about the timeframe."
     assert plan["summary"] == {"discovery_rows": 2, "feature_rows": 3, "considerations": 2, "design": 1, "diagram": True,
-                               "links": 2, "background": True, "goals": True, "blocks_removed": 0}
+                               "links": 2, "background": True, "goals": True, "blocks_removed": 0, "discovery_as_table": False}
     # replaceAllText comes last, after every index-based edit
     kinds = [next(iter(r)) for r in plan["requests"]]
     assert kinds[-1] == "replaceAllText" and "replaceAllText" not in kinds[:kinds.index("replaceAllText")]
@@ -225,3 +225,54 @@ def test_a_second_track_block_is_removed_whole_with_one_track():
     assert plan["summary"]["blocks_removed"] == 2
     # the empty paragraph before each section table survives, so no table touches another
     assert texts[texts.index("3.1.4 Documentation") + 3:texts.index("3.1.4 Documentation") + 5] == ["", "Boilerplate about the timeframe."]
+
+
+def master_with_tables() -> FakeDoc:
+    """The master with Discovery as a Question | Answer table, like the Features table."""
+    return (FakeDoc()
+            .paragraph("{{Merchant Name}} Solution Proposal", "TITLE")
+            .paragraph("1.4 Project Background", "HEADING_2").paragraph("{{Project Background}}")
+            .paragraph("1.5 Project Goals & Objectives", "HEADING_2").paragraph("{{Project Goals}}")
+            .table([["2.0 Scope"]])
+            .paragraph("2.1 Project Scope", "HEADING_2")
+            .paragraph("2.1.1 Discovery", "HEADING_3").paragraph("")
+            .table([["Question", "Answer"], ["", ""]])
+            .paragraph("2.1.2 Features & Functionality", "HEADING_3").paragraph("")
+            .table([["Feature & Functionality", "In Scope"], ["", ""]])
+            .paragraph("")
+            .table([["3.0 Solution"]])
+            .paragraph("3.1 Project Solution", "HEADING_2")
+            .paragraph("3.1.1 Technical Considerations", "HEADING_3").paragraph("{{Technical Considerations}}")
+            .paragraph("3.1.2 Integration Design", "HEADING_3").paragraph("{{Integration Design}}")
+            .paragraph("3.1.3 Flow Diagrams", "HEADING_3").paragraph("{{Flow Diagrams}}")
+            .paragraph("3.1.4 Documentation", "HEADING_3").paragraph("{{Documentation}}")
+            .paragraph("")
+            .table([["4.0 Timeframe"]])
+            .paragraph("Boilerplate about the timeframe."))
+
+
+def test_discovery_fills_a_table_when_the_master_has_one():
+    doc, plan = planned(doc=master_with_tables())
+    assert "{{" not in doc.text()
+    assert doc.tables()[1] == [["Question", "Answer"], ["Which regions are in scope?", "UK and NL"],
+                               ["Current PSP?", "A legacy PSP, moving to Adyen"]]
+    assert doc.tables()[2] == [["Feature & Functionality", "In Scope"], ["3D Secure", TICK], ["Tokenization", BOX],
+                               ["Payment methods", "Cards | iDEAL"]]
+    assert plan["summary"]["discovery_as_table"] is True and plan["summary"]["discovery_rows"] == 2
+    # no Discovery paragraphs were written outside the table
+    assert "Which regions are in scope?" not in [p["text"] for p in doc.paragraphs()]
+
+
+def test_discovery_table_with_no_answers_keeps_its_empty_row():
+    doc, _ = planned(track={**TRACK, "discovery": []}, doc=master_with_tables())
+    assert doc.tables()[1] == [["Question", "Answer"], ["", ""]]
+
+
+def test_discovery_table_header_is_checked():
+    bad = (FakeDoc().paragraph("{{Project Background}}").paragraph("{{Project Goals}}")
+           .paragraph("2.1.1 Discovery", "HEADING_3").table([["Topic", "Notes"], ["", ""]])
+           .paragraph("2.1.2 Features & Functionality", "HEADING_3").table([["Feature", "In Scope"], ["", ""]])
+           .paragraph("{{Technical Considerations}}").paragraph("{{Integration Design}}").paragraph("{{Flow Diagrams}}")
+           .paragraph("{{Documentation}}"))
+    with pytest.raises(RunError, match="Discovery table's header row"):
+        plan_document(parse_outline(bad.outline()), merchant="M", introduction=INTRO, track=TRACK)

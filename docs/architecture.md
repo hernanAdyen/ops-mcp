@@ -183,7 +183,7 @@ section's table because the Docs API won't delete it. Duplicating that block per
 | `src/imcp/proposal/brief.py` | The research brief: requirements, `nearest_assets` for doc pages and diagrams, known designs, instructions |
 | `src/imcp/proposal/outline.py` | The document outline the skill passes, and the checks that its indexes line up |
 | `src/imcp/proposal/draft.py` | Checking the IM's model's draft: sections, lengths, links against asset nodes or the docs host |
-| `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, Discovery, Features table, diagram, links) |
+| `src/imcp/proposal/doc_plan.py` | Pure: the Docs batch that fills a copy of the master (tokens, the Discovery and Features tables, diagram, links). A two-column table in the master (header row + one empty body row) is filled by reusing the empty row and inserting the rest below it |
 | `src/imcp/proposal/runs.py` | `/propose-solution` start, plan and record |
 | `src/imcp/app/proposal_api.py` | `POST /proposal/runs`, `/proposal/runs/{id}/doc-plan`, `/proposal/runs/{id}/record` |
 | `src/imcp/db/` | Tables (`models.py`), enums and the session helpers. Migrations are in `migrations/` |

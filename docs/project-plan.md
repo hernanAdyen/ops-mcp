@@ -62,17 +62,17 @@ master) that a person prepares from the EN template:
 - 1.1 to 1.3 stay boilerplate; the Stakeholders table is left for the IM.
 - 1.4 `{{Project Background}}` and 1.5 `{{Project Goals}}`: our model writes them from the two
   Introduction questions (ID-0083, ID-0084). One introduction per proposal.
-- **One track block** for sections 2 and 3: `2.1 {{Track}} Scope` with 2.1.1 Discovery
-  (`{{Discovery}}`) and 2.1.2 Features & Functionality (a table whose header row reads "Feature &
-  Functionality" and "In Scope", with exactly one empty body row), and `3.1 {{Track}} Solution` with
+- **The track blocks** for sections 2 and 3: `2.1 Project Scope` with 2.1.1 Discovery (a table whose
+  header row reads "Question" and "Answer", with exactly one empty body row; a `{{Discovery}}`
+  paragraph still works) and 2.1.2 Features & Functionality (a table whose header row reads "Feature &
+  Functionality" and "In Scope", with exactly one empty body row), and `3.1 Project Solution` with
   3.1.1 `{{Technical Considerations}}`, 3.1.2 `{{Integration Design}}`, 3.1.3 `{{Flow Diagrams}}`,
-  3.1.4 `{{Documentation}}`. The server fills the block for the first track and regenerates it for
-  each further track (2.2, 3.2, ...), writing the numbers and names itself. With one track the headings
-  read "Project Scope" and "Project Solution". The grey placeholder images, the second block, the stray
-  empty heading and the "Project Track Description" and "Focus Areas" lines are removed from the master
-  (the last two become Discovery questions in the bank).
-- 2.x.1 Discovery: question and answer, in sheet order, answered questions only (bold question, plain
-  answer). Unanswered questions are left out.
+  3.1.4 `{{Documentation}}`. The owner's master (2026-10-27) also keeps a second block, `2.2 {{Track}} -
+  Scope` and `3.2 {{Track}} - Proposed Solution`, with the same parts: with one track the server removes
+  it whole; with several it is the template to duplicate (next). The "Project Track Description" and
+  "Focus Areas" lines became Discovery questions in the bank.
+- 2.x.1 Discovery: one table row per answered question, in sheet order (question | answer; toggles
+  read Yes/No). Unanswered questions are left out.
 - 2.x.2 Features & Functionality: answered questions only. Toggles get a check mark in "In Scope" when
   yes; other types get the answer text. The bank's F&F questions that should be toggles are to be fixed
   in the master bank and reloaded (15 of 42 aren't toggles today).

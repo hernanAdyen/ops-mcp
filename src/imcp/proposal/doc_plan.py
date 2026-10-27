@@ -3,7 +3,8 @@
 The master is a single-tab Google Doc with {{tokens}} where content goes:
   {{Merchant Name}}                      on the cover and in the header (replaced everywhere)
   {{Project Background}} {{Project Goals}}   1.4 and 1.5
-  one track block: a heading "2.x {{Track}} Scope" with {{Discovery}} and the Features &
+  one track block: a heading "2.x {{Track}} Scope" with Discovery (a Question | Answer table with a
+  header row and one empty body row, or a {{Discovery}} paragraph) and the Features &
   Functionality table (a header row and exactly one empty body row), and a heading
   "3.x {{Track}} Solution" with {{Technical Considerations}}, {{Integration Design}},
   {{Flow Diagrams}} and {{Documentation}}.
@@ -30,6 +31,11 @@ TOKENS = {
     "documentation": ("{{Documentation}}",),
 }
 FEATURES_HEADING = "features & functionality"
+DISCOVERY_HEADING = "discovery"
+TABLE_HEADERS = {  # the words the two header cells must contain
+    FEATURES_HEADING: ("feature", "scope"),
+    DISCOVERY_HEADING: ("question", "answer"),
+}
 TICK, BOX = "☑", "☐"  # ☑ ☐
 IMAGE_WIDTH_PT = 440
 BULLETS = "BULLET_DISC_CIRCLE_SQUARE"
@@ -57,23 +63,43 @@ def find_token(outline: Outline, key: str, *, after: int = -1) -> Paragraph:
     raise _bad(f"the paragraph {TOKENS[key][0]} is missing (it must be a paragraph of its own).")
 
 
+def _heading(outline: Outline, words: str, *, after: int = -1) -> Paragraph | None:
+    return next((p for p in outline.paragraphs if p.index > after and p.heading_level is not None
+                 and words in p.text.casefold()), None)
+
+
+def _check_table(table: Table, name: str, headers: tuple[str, str]) -> Table:
+    if len(table.rows) != 2 or any(len(r.cells) != 2 for r in table.rows):
+        raise _bad(f"the {name} table must have two columns, a header row and exactly one empty row.")
+    header = [c.text.casefold() for c in table.rows[0].cells]
+    if headers[0] not in header[0] or headers[1] not in header[1]:
+        raise _bad(f"the {name} table's header row must read '{headers[0].title()}' and '{headers[1].title()}' (or contain those words).")
+    body = table.rows[1]
+    if any(c.text.strip() or c.e - c.s != EMPTY_CELL for c in body.cells):
+        raise _bad(f"the {name} table's body row must be empty.")
+    return table
+
+
 def features_table(outline: Outline, *, after: int = -1) -> Table:
-    heading = next((p for p in outline.paragraphs if p.index > after and p.heading_level is not None
-                    and FEATURES_HEADING in p.text.casefold()), None)
+    heading = _heading(outline, FEATURES_HEADING, after=after)
     if heading is None:
         raise _bad("the 'Features & Functionality' heading is missing.")
     table = outline.table_after(heading)
     if table is None:
         raise _bad("there is no table under the 'Features & Functionality' heading.")
-    if len(table.rows) != 2 or any(len(r.cells) != 2 for r in table.rows):
-        raise _bad("the Features & Functionality table must have two columns, a header row and exactly one empty row.")
-    header = [c.text.casefold() for c in table.rows[0].cells]
-    if "feature" not in header[0] or "scope" not in header[1]:
-        raise _bad("the Features & Functionality table's header row must read 'Feature & Functionality' and 'In Scope'.")
-    body = table.rows[1]
-    if any(c.text.strip() or c.e - c.s != EMPTY_CELL for c in body.cells):
-        raise _bad("the Features & Functionality table's body row must be empty.")
-    return table
+    return _check_table(table, "Features & Functionality", TABLE_HEADERS[FEATURES_HEADING])
+
+
+def discovery_table(outline: Outline, *, after: int = -1) -> Table | None:
+    """The Discovery table (Question | Answer) under the Discovery heading, or None when the master
+    uses a {{Discovery}} paragraph instead."""
+    heading = _heading(outline, DISCOVERY_HEADING, after=after)
+    if heading is None:
+        return None
+    table = outline.table_after(heading)
+    if table is None:
+        return None
+    return _check_table(table, "Discovery", TABLE_HEADERS[DISCOVERY_HEADING])
 
 
 def _replace_paragraph(p: Paragraph, text: str) -> list[dict]:
@@ -126,11 +152,11 @@ def discovery(p: Paragraph, answers: list[dict]) -> Group:
     return Group(p.s, reqs)
 
 
-def features(table: Table, rows: list[dict]) -> Group:
+def fill_table(table: Table, rows: list[tuple[str, str]]) -> Group:
     """
-    Fill the Features & Functionality table: one row per answered question. The master's one empty
-    body row is reused; the others are inserted below it (each new empty row spans 1 + 2 cells x 2 = 5),
-    then every cell is filled from the last row backwards so computed indexes stay valid.
+    Fill a two-column table: one row per item. The master's one empty body row is reused; the others
+    are inserted below it (each new empty row spans 1 + 2 cells x 2 = 5), then every cell is filled
+    from the last row backwards so computed indexes stay valid.
     """
     if not rows:
         return Group(table.s, [])
@@ -140,11 +166,24 @@ def features(table: Table, rows: list[dict]) -> Group:
                                 "insertBelow": True}} for _ in rows[1:]]
     for j in range(len(rows) - 1, -1, -1):
         row_start = body.s + row_span * j
-        feature = " ".join(rows[j]["feature"].split())
-        mark = TICK if rows[j]["in_scope"] is True else BOX if rows[j]["in_scope"] is False else " ".join(rows[j]["text"].split())
-        reqs.append({"insertText": {"location": {"index": row_start + 4}, "text": mark}})
-        reqs.append({"insertText": {"location": {"index": row_start + 2}, "text": feature}})
+        left, right = (" ".join(cell.split()) for cell in rows[j])
+        if right:
+            reqs.append({"insertText": {"location": {"index": row_start + 4}, "text": right}})
+        if left:
+            reqs.append({"insertText": {"location": {"index": row_start + 2}, "text": left}})
     return Group(table.s, reqs)
+
+
+def features(table: Table, rows: list[dict]) -> Group:
+    """The Features & Functionality table: feature | tick, box or text."""
+    return fill_table(table, [
+        (r["feature"], TICK if r["in_scope"] is True else BOX if r["in_scope"] is False else r["text"]) for r in rows
+    ])
+
+
+def discovery_rows(table: Table, answers: list[dict]) -> Group:
+    """The Discovery table: question | answer."""
+    return fill_table(table, [(a["question"], a["answer"]) for a in answers])
 
 
 def diagram(p: Paragraph, image: dict | None) -> Group:
@@ -231,13 +270,20 @@ def plan_document(outline: Outline, *, merchant: str, introduction: dict, track:
             links: [{title, url}]}
     Returns {"requests": [...], "summary": {...}}. One track for now; further tracks are regenerated blocks (next).
     """
-    tokens = {key: find_token(outline, key) for key in ("background", "goals", "discovery", "considerations", "design",
+    tokens = {key: find_token(outline, key) for key in ("background", "goals", "considerations", "design",
                                                         "diagrams", "documentation")}
     table = features_table(outline)
+    # Discovery: a Question | Answer table under the heading when the master has one, else the {{Discovery}} paragraph
+    disc_table = discovery_table(outline)
+    if disc_table is not None:
+        disc_group = discovery_rows(disc_table, track["discovery"])
+    else:
+        tokens["discovery"] = find_token(outline, "discovery")
+        disc_group = discovery(tokens["discovery"], track["discovery"])
     groups = [
         plain_paragraphs(tokens["background"], introduction.get("background") or []),
         plain_paragraphs(tokens["goals"], introduction.get("goals") or []),
-        discovery(tokens["discovery"], track["discovery"]),
+        disc_group,
         features(table, track["features"]),
         plain_paragraphs(tokens["considerations"], track["technical_considerations"]),
         plain_paragraphs(tokens["design"], track["integration_design"]),
@@ -270,5 +316,6 @@ def plan_document(outline: Outline, *, merchant: str, introduction: dict, track:
             "background": bool(introduction.get("background")),
             "goals": bool(introduction.get("goals")),
             "blocks_removed": len(removed),
+            "discovery_as_table": disc_table is not None,
         },
     }
