@@ -54,5 +54,6 @@ def call_prompt(questions: list[Question], new_questions: list[dict] | None = No
         "priorities": list(priorities) or "all",
         "questions": asked + len(extra),
         "left_out": total - asked,
-        "text": intro + "\n\n" + "\n".join(lines) if lines else None,
+        # no text when nothing matched: a prompt of track headings alone is no prompt
+        "text": intro + "\n\n" + "\n".join(lines) if lines and asked + len(extra) else None,
     }

@@ -155,15 +155,15 @@ async def test_unknown_tag_values_are_refused_by_the_tool():
 
 
 @pytest.mark.anyio
-async def test_sheet_plan_passes_the_call_prompt_choice():
+async def test_call_prompt_goes_to_the_recorded_run():
     received = []
-    await server_for(received).call_tool("im_scope_sheet_plan", {
-        "draft_id": RUN, "tab_sheet_id": 7, "column_count": 12, "id_column": ["id"], "call_prompt": True,
-        "call_prompt_priorities": []})
-    assert received[0][2]["call_prompt"] is True and received[0][2]["call_prompt_priorities"] == []
+    text = _tool_text(await server_for(received).call_tool("im_scope_call_prompt", {"draft_id": RUN, "sheet_ids": [7, 1001]}))
+    assert received[0][:2] == ("call-prompt", RUN) and received[0][2] == {"sheet_ids": [7, 1001], "priorities": [1]}
+    assert json.loads(text)["step"] == "call-prompt"
     received.clear()
-    await server_for(received).call_tool("im_scope_sheet_plan", {"draft_id": RUN, "tab_sheet_id": 7, "column_count": 12, "id_column": ["id"]})
-    assert received[0][2]["call_prompt"] is False and received[0][2]["call_prompt_priorities"] == [1]
+    await server_for(received).call_tool("im_scope_call_prompt", {"draft_id": RUN, "sheet_ids": [7], "priorities": []})
+    assert received[0][2]["priorities"] == []
+    assert "draft_id should be" in _tool_text(await server_for([]).call_tool("im_scope_call_prompt", {"draft_id": "nope", "sheet_ids": [7]}))
 
 
 @pytest.mark.anyio

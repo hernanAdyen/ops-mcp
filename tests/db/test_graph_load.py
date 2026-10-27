@@ -12,7 +12,7 @@ from imcp.graph import load_docs
 from imcp.graph.assets import load_assets
 from imcp.graph.docs_index import Page, parse_index, parse_rules, select_pages
 from imcp.graph.load_docs import load_doc_pages
-from imcp.graph.search import nearest_assets
+from imcp.graph.search import nearest_assets, nearest_assets_for
 from imcp.llm import ModelError
 from imcp.scope.runs import RunError
 from tests.db.conftest import session_on
@@ -236,3 +236,18 @@ def test_graph_load_api_runs_as_a_job(connection, monkeypatch):
     bad = client.post("/graph/loads/docs", json={"rules_csv": "prefix,include\n"}, params={"wait": 30})
     assert bad.status_code == 422 and "rules file" in bad.json()["detail"]["error"]
     assert client.get("/graph/jobs/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_search_per_text_merges_and_says_what_each_page_is_for(session):
+    embedder = FakeEmbedder()
+    load(session, embedder)
+    texts = ["Tokenization of stored card details for recurring payments", "Tipping on the terminal", "Tokens for recurring payments"]
+    found = nearest_assets_for(session, embedder, texts, kind=E.AssetKind.doc_page, per_text=1)
+    by_url = {f["url"]: f for f in found}
+    tok = by_url["https://docs.adyen.com/online-payments/tokenization"]
+    assert tok["for"] == [0, 2]  # found by the first and the third requirement, kept once
+    assert by_url["https://docs.adyen.com/point-of-sale/tipping"]["for"] == [1]
+    assert found[0]["distance"] <= found[-1]["distance"]
+    assert len(embedder.calls[-1]) == 3  # one embedding call for all texts
+    assert nearest_assets_for(session, embedder, [], kind=E.AssetKind.doc_page) == []
+    assert len(nearest_assets_for(session, embedder, texts, limit=1)) == 1

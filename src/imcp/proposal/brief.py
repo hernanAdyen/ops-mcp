@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session
 
 from imcp.db import enums as E
 from imcp.db.models import Node
-from imcp.graph.search import nearest_assets
+from imcp.graph.search import nearest_assets, nearest_assets_for
 from imcp.proposal.answers import TrackAnswers, feature_rows
 
 MAX_SEARCH_CHARS = 4000
 MAX_DOC_LINKS = 12  # offered to the research step; the document itself takes fewer (max_links)
 MAX_DIAGRAMS = 3
+MAX_REQUIREMENT_SEARCHES = 40
+PER_REQUIREMENT = 3
 KNOWN_TYPES = (E.NodeType.integration_design, E.NodeType.consideration, E.NodeType.product)
 
 SECTIONS = {
@@ -78,10 +80,29 @@ def known_nodes(session: Session, types=KNOWN_TYPES, limit: int = 40) -> list[di
     return [{"type": n.type.value, "label": n.label, "description": n.description} for n in rows]
 
 
+def find_doc_pages(session: Session, embedder, track: TrackAnswers, tags: dict[str, list[str]]) -> list[dict]:
+    """
+    One search per requirement (a feature in scope, a Discovery answer), merged by best match, then the
+    whole track as one query to fill up. A page says which requirement IDs it was found for, so the
+    research knows what each link is for. A track-level query alone found overview pages and checklists.
+    """
+    reqs = requirements(track)[:MAX_REQUIREMENT_SEARCHES]
+    pages = nearest_assets_for(session, embedder, [r["text"] for r in reqs], kind=E.AssetKind.doc_page, tags=tags,
+                               per_text=PER_REQUIREMENT, limit=MAX_DOC_LINKS)
+    for p in pages:
+        p["for"] = [reqs[i]["id"] for i in p.pop("for")]
+    if len(pages) < MAX_DOC_LINKS:
+        seen = {p["url"] for p in pages}
+        for p in nearest_assets(session, embedder, search_text(track), kind=E.AssetKind.doc_page, tags=tags, limit=MAX_DOC_LINKS):
+            if p["url"] not in seen and len(pages) < MAX_DOC_LINKS:
+                pages.append({**p, "for": []})
+    return pages
+
+
 def build_brief(session: Session, embedder, track: TrackAnswers, tags: dict[str, list[str]], *,
                 docs_host: str | None) -> dict:
     text = search_text(track)
-    doc_pages = nearest_assets(session, embedder, text, kind=E.AssetKind.doc_page, tags=tags, limit=MAX_DOC_LINKS)
+    doc_pages = find_doc_pages(session, embedder, track, tags)
     diagrams = nearest_assets(session, embedder, text, kind=E.AssetKind.flow_diagram, tags=tags, limit=MAX_DIAGRAMS)
     known = known_nodes(session)
     notes = []
@@ -96,8 +117,8 @@ def build_brief(session: Session, embedder, track: TrackAnswers, tags: dict[str,
         "track": track.name,
         "tags": tags,
         "requirements": requirements(track),
-        "doc_pages": [{"title": d["title"], "url": d["url"], "md_url": d["url"] + ".md", "description": d["description"]}
-                      for d in doc_pages],
+        "doc_pages": [{"title": d["title"], "url": d["url"], "md_url": d["url"] + ".md", "description": d["description"],
+                       "for": d["for"]} for d in doc_pages],
         "diagrams": [{"title": d["title"], "url": d["url"], "description": d["description"]} for d in diagrams],
         "known": known,
         "sections": SECTIONS,

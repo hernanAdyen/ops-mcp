@@ -1,0 +1,69 @@
+{
+  "merchant": "Slice Street Pizza",
+  "material": {"file": "material.md", "label": "Gong summary, Oct 27", "kind": "summary"},
+  "tabs": [
+    {
+      "name": "US",
+      "ids": ["ID-0083", "ID-0084", "ID-0001", "ID-0002", "ID-0003", "ID-0004", "ID-0077", "ID-0082", "ID-0098", "ID-0132",
+              "ID-0137", "ID-0019", "ID-0050", "ID-0075", "ID-0078", "ID-0079", "ID-0080", "ID-0099", "ID-0031", "ID-0032",
+              "ID-0057", "ID-0058", "ID-0060", "ID-0076", "ID-0081", "ID-0100", "ID-0005", "ID-0018", "ID-0036", "ID-0138",
+              "ID-0046", "ID-0053", "ID-0051", "ID-0052", "ID-0054", "ID-0055", "ID-0059", "ID-0061", "ID-0062"],
+      "gold": {
+        "ID-0083": {"contains": ["online ordering"]},
+        "ID-0084": {"contains_any": ["Super Bowl", "February"]},
+        "ID-0001": {"contains": ["United States"], "not_contains": ["France"]},
+        "ID-0002": {"contains": ["Visa", "Discover", "PayPal"], "not_contains": ["Cartes Bancaires"]},
+        "ID-0003": {"equals": "USD"},
+        "ID-0004": {"equals": "USD"},
+        "ID-0077": {"equals": "One-click checkout (CardOnFile)"},
+        "ID-0082": {"contains_any": ["token migration", "go-live"], "not_contains": ["France", "Terminal rollout"]},
+        "ID-0098": {"equals": "OMS | CRM"},
+        "ID-0137": {"contains": ["slicestreet.example"], "not_contains": ["France"]},
+        "ID-0005": {"equals": "iOS | Android | Web"},
+        "ID-0036": {"contains_any": ["custom", "No plugin", "no plugin"], "not_contains": ["POS"]},
+        "ID-0138": {"equals": "TRUE"},
+        "ID-0057": {"equals": "TRUE"},
+        "ID-0132": {"empty": true},
+        "ID-0018": {"empty": true},
+        "ID-0054": {"empty": true},
+        "ID-0031": {"empty": true}
+      },
+      "forbidden_words": ["France", "EUR", "Cartes Bancaires", "Edenred", "POS vendor"],
+      "no_bank_additions_from": ["ID-0063", "ID-0065", "ID-0067", "ID-0071", "ID-0073", "ID-0006", "ID-0139"]
+    },
+    {
+      "name": "FR",
+      "ids": ["ID-0001", "ID-0002", "ID-0003", "ID-0004", "ID-0063", "ID-0065", "ID-0067", "ID-0071", "ID-0073", "ID-0077",
+              "ID-0082", "ID-0098", "ID-0132", "ID-0137", "ID-0019", "ID-0050", "ID-0069", "ID-0072", "ID-0074", "ID-0078",
+              "ID-0080", "ID-0099", "ID-0102", "ID-0031", "ID-0032", "ID-0057", "ID-0058", "ID-0066", "ID-0081", "ID-0100",
+              "ID-0006", "ID-0018", "ID-0036", "ID-0138", "ID-0139", "ID-0039", "ID-0040", "ID-0046", "ID-0053", "ID-0068",
+              "ID-0070", "ID-0101", "ID-0037", "ID-0038", "ID-0042", "ID-0043", "ID-0051", "ID-0052", "ID-0054", "ID-0055", "ID-0064"],
+      "gold": {
+        "ID-0001": {"contains": ["France"], "not_contains": ["United States"]},
+        "ID-0002": {"contains": ["Cartes Bancaires", "Apple Pay"], "not_contains": ["Discover", "PayPal"]},
+        "ID-0003": {"equals": "EUR"},
+        "ID-0004": {"equals": "EUR"},
+        "ID-0063": {"equals": "Mostly countertop"},
+        "ID-0065": {"equals": "Prebuilt POS provider integration"},
+        "ID-0067": {"contains_any": ["tipping", "Tipping"]},
+        "ID-0071": {"equals": "Payments only"},
+        "ID-0073": {"contains_any": ["counter", "delivery"]},
+        "ID-0082": {"contains_any": ["rollout", "offline"], "not_contains": ["token migration"]},
+        "ID-0132": {"contains_any": ["franchisee", "Franchisee"]},
+        "ID-0006": {"equals": "Countertop | Portable"},
+        "ID-0018": {"contains_any": ["franchisee", "Franchisee"]},
+        "ID-0036": {"contains": ["POS"]},
+        "ID-0139": {"equals": "Not in scope"},
+        "ID-0070": {"equals": "TRUE"},
+        "ID-0072": {"contains_any": ["loyalty", "points", "Loyalty"]},
+        "ID-0138": {"empty": true},
+        "ID-0054": {"empty": true},
+        "ID-0057": {"empty": true}
+      },
+      "forbidden_words": ["United States", "USD", "Discover", "slicestreet.example", "custom checkout"],
+      "no_bank_additions_from": ["ID-0083", "ID-0084", "ID-0005", "ID-0060"]
+    }
+  ],
+  "covered_by_bank": ["ID-0070", "ID-0072", "ID-0054", "ID-0057"],
+  "notes": "Two tracks in one summary. The US tab must take only the US section; FR only the FR section. Remarks in 'Other notes' answer bank questions (offline processing ID-0070, loyalty ID-0072, token migration ID-0057) and must not become new questions. Undecided remarks (surcharging, meal vouchers) leave cells empty."
+}

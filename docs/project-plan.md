@@ -38,6 +38,11 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/create-
 
 ### Learned on the first real run (2026-10-27, Northwind test sheet)
 
+- One track-level query found overview pages and checklists; the useful pages (the plugin, the token
+  import) turned up only in the research. The brief now searches once per requirement and merges.
+- Everything the IM is told to confirm is noise when all answers came from material: the reply now
+  gives counts only. The call-notes prompt is offered after the sheet, as a tab, never printed.
+
 - The Docs API refuses to delete the newline of the paragraph right before a table. Block removals and
   emptied placeholders keep their final newline; `FakeDoc` enforces the same rule.
 - `insertInlineImage` with a width only keeps the aspect ratio (440 pt wide came out 286 pt high).
@@ -136,11 +141,32 @@ and `tests/fake_doc.py` (plays a Docs batch on an index model). One track per do
    later, no normalising in either case. The column takes any size; switching model re-embeds on the
    next load.
 
+## Evals (started 2026-10-27)
+
+`evals/` holds fictional cases with known right answers and `run_extraction.py`, which sends a case's
+tabs to the app server as the skill would and scores the result: gold answers by ID, track leaks,
+cross-track bank additions, spurious new questions. See `evals/README.md`. First case:
+`slice-street-pizza`, a two-track Gong summary.
+
+Baseline (before the fixes): US 7/18 gold checks, 9 leaks, 5 cross-track additions, 2 spurious new
+questions; FR 8/20, 6 leaks, 1 cross-track, 3 spurious. The extraction mixed both tracks into every
+answer, missed answers given by ID, and wrote new questions for topics the bank already asks.
+
+Fixes made against it: the extraction prompt names the tab's track and tells the model to use that
+track's section only; a "new" question whose nearest bank question covers it becomes that question's
+answer when the formats fit (a toggle's yes/no, a free-text question takes the model's reason), and is
+dropped when it has no answer and the sheet already asks the bank question; undecided, "to be confirmed",
+"not discussed" and "not applicable" are no answer for any type; a toggle answered with a sentence that
+starts with yes or no counts.
+
+After the fixes (same case, same model): US 17/18 gold checks, FR 19/20, no leaks, no cross-track
+additions, no spurious new questions. The two misses left are prose remarks the model didn't tie to
+their bank questions (token migration ID-0057 on US, loyalty ID-0072 on FR).
+
 ## Backlog
 
-- **Extraction misses.** In the Safelite test our model answered ID-0098 wrongly ("Other" instead of
-  ERP) and missed ID-0139 and ID-0065. Tighten the prompt, or answer by section in parallel calls
-  (also makes runs faster).
+- **Extraction misses.** Measured by the eval above; earlier seen as ID-0098 answered "Other" instead of
+  ERP and ID-0139 and ID-0065 missed. Answering by section in parallel calls would also make runs faster.
 - **A curator step for the review queue** (`/review-questions`): you approve, edit or reject queued
   questions and approved ones are added to the master with the next free IDs.
 - **Server-side Google access** (a service account), so batches don't pass through Claude. Needs a

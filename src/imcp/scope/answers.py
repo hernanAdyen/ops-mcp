@@ -140,7 +140,7 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     materials = [Material(m.label.strip(), m.kind, m.text) for m in req.material]
     extraction = extract_answers(model, materials, sheet_questions, others,
                                  [r.question for r in req.new_rows if r.question.strip()], merchant_name,
-                                 sanitize=settings.FLAG_SANITIZE)
+                                 sanitize=settings.FLAG_SANITIZE, track=req.tab_title.strip())
     if extraction.status != "ok":
         raise RunError(503, f"{extraction.note} Nothing was written to the sheet.")
 

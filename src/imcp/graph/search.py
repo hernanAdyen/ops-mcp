@@ -21,16 +21,14 @@ def _tag_filter(name: str, values: list[str]):
     return (func.jsonb_array_length(column) == 0) | func.jsonb_exists_any(column, cast(values, ARRAY(String)))
 
 
-def nearest_assets(session: Session, embedder, text: str, *, kind: E.AssetKind | None = None,
-                   tags: dict[str, list[str]] | None = None, limit: int = 10) -> list[dict]:
-    """[{url, title, description, kind, tags, distance}], nearest first."""
-    [query] = embedder.embed([text])
-    distance = Node.embedding.cosine_distance(query)
+def _nearest(session: Session, model: str, vector: list[float], *, kind: E.AssetKind | None,
+             tags: dict[str, list[str]] | None, limit: int) -> list[dict]:
+    distance = Node.embedding.cosine_distance(vector)
     stmt = (
         select(Node, Asset, cast(distance, Float).label("distance"))
         .join(Asset, Asset.node_id == Node.node_id)
         .where(Node.type == E.NodeType.asset, Node.status == E.Lifecycle.active, Asset.deprecated.is_(False),
-               Node.embedding.is_not(None), Node.embedding_model == embedder.model)
+               Node.embedding.is_not(None), Node.embedding_model == model)
     )
     if kind is not None:
         stmt = stmt.where(Asset.kind == kind)
@@ -45,3 +43,33 @@ def nearest_assets(session: Session, embedder, text: str, *, kind: E.AssetKind |
          "tags": (node.attrs or {}).get("tags", {}), "distance": round(float(d), 4)}
         for node, asset, d in rows
     ]
+
+
+def nearest_assets(session: Session, embedder, text: str, *, kind: E.AssetKind | None = None,
+                   tags: dict[str, list[str]] | None = None, limit: int = 10) -> list[dict]:
+    """[{url, title, description, kind, tags, distance}], nearest first."""
+    [query] = embedder.embed([text])
+    return _nearest(session, embedder.model, query, kind=kind, tags=tags, limit=limit)
+
+
+def nearest_assets_for(session: Session, embedder, texts: list[str], *, kind: E.AssetKind | None = None,
+                       tags: dict[str, list[str]] | None = None, per_text: int = 3, limit: int = 12) -> list[dict]:
+    """
+    One search per text (a requirement each), merged: a page found by several requirements keeps its
+    best distance and lists every text it matched in `for` (their positions in `texts`). All texts are
+    embedded in one call. Ranked by best distance, nearest first, at most `limit` pages.
+    """
+    if not texts:
+        return []
+    vectors = embedder.embed(texts)
+    found: dict[str, dict] = {}
+    for i, vector in enumerate(vectors):
+        for hit in _nearest(session, embedder.model, vector, kind=kind, tags=tags, limit=per_text):
+            kept = found.get(hit["url"])
+            if kept is None:
+                found[hit["url"]] = {**hit, "for": [i]}
+            else:
+                kept["for"].append(i)
+                kept["distance"] = min(kept["distance"], hit["distance"])
+    ranked = sorted(found.values(), key=lambda h: (h["distance"], -len(h["for"])))
+    return ranked[:limit]

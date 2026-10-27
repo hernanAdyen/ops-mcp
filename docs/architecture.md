@@ -110,8 +110,7 @@ block of sections per track.
 ### /create-scope
 
 1. The skill asks the IM for the merchant, the tracks (one short message; "one" is the usual answer),
-   tags (one question card per track: channels, pillars, categories; the first card also asks whether
-   they want the call-notes prompt in the sheet) and notes.
+   tags (one question card per track: channels, pillars, categories) and notes.
 2. `im_scope_start` (a job: `im_scope_wait` until it's done): per track, the server selects questions
    by tags; our model adds questions for topics in the notes, told which track it is choosing for, and
    drafts a question for each topic the bank doesn't cover (once, for the project). A draft run is saved.
@@ -121,13 +120,13 @@ block of sections per track.
    duplicates it once per further track (before any row is touched, so each tab starts from the same
    rows), and in each tab deletes the rows not in that track, adds `found_by`, orders and groups the
    rows by section, adds **Suggested additions** at the end of the first tab, and keeps the master's filter.
-   If the IM wanted the call-notes prompt, the batch also adds a `Call prompt` tab with the prompt text
-   in it, so the IM copies it from the sheet and nothing long passes through chat.
 5. The skill sends the batch, reads column A of every track tab back, asks consent if there are new
-   questions, and calls `im_scope_record`: the read-back check per tab, the deal with its tracks, the
-   review queue, and a link to the `Call prompt` tab (or the prompt text, when no tab was made).
-   The copy goes into the IM's own folder when their MCP config names one (`PROPOSALS_DRIVE_FOLDER_URL`
-   in `McpSettings`, returned by the start tools as `proposals_folder_url`).
+   questions, and calls `im_scope_record`: the read-back check per tab, the deal with its tracks and the
+   review queue. The copy goes into the IM's own folder when their MCP config names one
+   (`PROPOSALS_DRIVE_FOLDER_URL` in `McpSettings`, returned by the start tools as `proposals_folder_url`).
+6. After the reply, the skill offers the call-notes prompt. On a yes, `im_scope_call_prompt` returns a
+   small batch that adds a `Call prompt` tab with the prompt text, and the IM gets a link to that tab,
+   so nothing long passes through chat. The offer comes after the sheet, never before.
 
 ### /source-scope-answers
 
@@ -146,8 +145,9 @@ The one command where the IM's own model writes: the server makes no chat model 
 1. The skill reads the track tab's ID, answer, status, source and question columns and calls
    `im_proposal_start`. The server picks the answers (the IM's own win, `suggested` ones are used but
    flagged, `rejected` are skipped), lists the open priority-1 questions, and builds the **research
-   brief** from the graph: the requirements, the nearest doc pages and diagrams (`nearest_assets`,
-   narrowed by the track's tags from `opportunity.tracks`), the designs the graph knows, and instructions.
+   brief** from the graph: the requirements, the nearest doc pages (one search per requirement, merged,
+   then the whole track to fill up; each page says which requirement IDs it is for) and diagrams, narrowed
+   by the track's tags from `opportunity.tracks`, the designs the graph knows, and instructions.
 2. The IM's model researches with its own tools (the brief's `.md` links first) and drafts 1.4, 1.5 and
    the track's Technical Considerations and Integration Design as structured JSON with the links it used.
 3. The skill copies the proposal master into `SolutionProposals`, reads the copy and derives a compact
@@ -181,7 +181,7 @@ section's table because the Docs API won't delete it. Duplicating that block per
 | `src/imcp/graph/docs_index.py` | Pure: parses the Adyen docs index (`llms.txt`) and the rules CSV (`data/graph/adyen-doc-pages.csv`, longest prefix wins) into the pages to load, with tags |
 | `src/imcp/graph/assets.py` | Loads asset nodes (doc pages now, diagrams next): dry run or apply, embeds new and changed, deprecates what dropped out, records an `ingestion_run` |
 | `src/imcp/graph/load_docs.py` | One doc page load: fetch the index from `DOCS_INDEX_URL`, apply the rules, load. The index is never stored |
-| `src/imcp/graph/search.py` | `nearest_assets`: tags narrow (an asset with no value for a tag applies to everyone), the embedding ranks |
+| `src/imcp/graph/search.py` | `nearest_assets` (one text) and `nearest_assets_for` (one search per requirement, merged, each page saying which requirements found it): tags narrow (an asset with no value for a tag applies to everyone), the embedding ranks |
 | `src/imcp/graph/diagrams.py` | The owner's flow diagrams CSV (title, url, description, tags) as `flow_diagram` asset nodes |
 | `src/imcp/app/graph_api.py` | `POST /graph/loads/docs` and `/graph/loads/diagrams` as jobs, `GET /graph/jobs/{id}` |
 | `src/imcp/proposal/answers.py` | Pure: which answers of a track go into the proposal, the Features table rows (tick, box or text) |
@@ -204,6 +204,7 @@ section's table because the Docs API won't delete it. Duplicating that block per
 | `src/imcp/scope/call_prompt.py` | The call-notes prompt |
 | `src/imcp/scope/text.py` | Text helpers: trimming, scrubbing, comparing questions |
 | `skills/` | The commands, as skills |
+| `evals/` | Fictional cases with known right answers and the runner that scores our model against them through the app server |
 | `tests/` | Tests. `tests/db/` need the Postgres test database. `fakes.py` has `FakeModel` and `FakeEmbedder`; `fake_doc.py` plays a Docs batch on an index model, like `FakeTab` for Sheets |
 
 ## 6. Data

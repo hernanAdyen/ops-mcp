@@ -35,7 +35,7 @@ from imcp.scope.call_prompt import call_prompt
 from imcp.scope.candidates import SUBSECTION_LABELS, Tags, bank_status, brief, counts, in_range, tag_matches
 from imcp.scope.queue import add_candidates, sha256
 from imcp.scope.sheet_plan import (CALL_PROMPT_TAB, RowInfo, SheetPlanError, TrackEdit, new_sheet_ids, out_of_order,
-                                   plan_call_prompt_tab, plan_tracks, sort_key)
+                                   plan_call_prompt_tab, plan_tracks)
 from imcp.scope.text import same_question
 from imcp.scope.topics import match_topics
 
@@ -109,9 +109,13 @@ class PlanRequest(BaseModel):
     remove_ids: list[str] = Field(default_factory=list, description="Dropped from every track that has them")
     add_ids: list[str] = Field(default_factory=list, description="Added to every track")
     tracks: list[TrackChanges] = Field(default_factory=list, description="Changes to one track only")
-    call_prompt: bool = Field(default=False, description="Add a 'Call prompt' tab with the call-notes prompt")
-    call_prompt_priorities: list[Literal[1, 2, 3]] = Field(default_factory=lambda: [1],
-                                                          description="Questions in the prompt; [] = all")
+
+
+class CallPromptRequest(BaseModel):
+    """After record: the call-notes prompt as a tab of the sheet, when the IM asks for it."""
+
+    priorities: list[Literal[1, 2, 3]] = Field(default_factory=lambda: [1], description="Questions in the prompt; [] = all")
+    sheet_ids: list[int] = Field(default_factory=list, description="Every tab's sheetId in the sheet now, in tab order")
 
 
 class TabRead(BaseModel):
@@ -127,8 +131,6 @@ class RecordRequest(BaseModel):
                                           description="Column A of the only tab, when the scope has one track")
     tabs: list[TabRead] = Field(default_factory=list, description="Column A of every track's tab")
     share_new_questions: bool = Field(default=False, description="The IM agreed to share new questions for review")
-    call_prompt_priorities: list[Literal[1, 2, 3]] = Field(default_factory=lambda: [1],
-                                                          description="Questions for the call-notes prompt; [] = all")
 
 
 def normalise_name(name: str) -> str:
@@ -313,18 +315,6 @@ def plan_run(session: Session, run_id: str, req: PlanRequest) -> dict:
         planned["tab_sheet_id"] = tab["tab_sheet_id"]
         planned["missing_from_sheet"] = tab["missing_from_sheet"]
 
-    # The call-notes prompt as a tab of its own, after the track tabs: the IM copies it from the sheet.
-    prompt_tab = None
-    if req.call_prompt:
-        prompt = _call_prompt_for(session, edits, info, [{"id": g["id"], "question": g["question"]} for g in gaps] if additions else [],
-                                  tuple(req.call_prompt_priorities))
-        if prompt["text"]:
-            taken = list(req.sheet_ids) + [tab["tab_sheet_id"] for tab in plan["tabs"]]
-            [prompt_id] = new_sheet_ids(taken, 1)
-            index = req.sheet_ids.index(req.tab_sheet_id) + len(plan["tabs"]) if req.tab_sheet_id in req.sheet_ids else None
-            plan["requests"] += plan_call_prompt_tab(prompt_id, prompt["text"], index)
-            prompt_tab = {"name": CALL_PROMPT_TAB, "tab_sheet_id": prompt_id, "questions": prompt["questions"],
-                          "left_out": prompt["left_out"], "priorities": prompt["priorities"]}
     gen.trace = {
         **trace,
         "stage": "planned",
@@ -332,13 +322,11 @@ def plan_run(session: Session, run_id: str, req: PlanRequest) -> dict:
         "not_in_scope": not_in_scope,
         "in_sheet_not_loaded": not_loaded,
         "gap_rows": [g["id"] for g in gaps] if additions else [],
-        "call_prompt_tab": prompt_tab,
     }
     first = plan["tabs"][0]
     return {
         "draft_id": run_id,
         "requests": plan["requests"],
-        "call_prompt_tab": prompt_tab,
         "filter": first["filter"],
         "tracks": [{"name": tab["name"], "tab_sheet_id": tab["tab_sheet_id"], "rows_kept": tab["rows_kept"],
                     "rows_deleted": tab["rows_deleted"], "sections": tab["sections"],
@@ -352,14 +340,39 @@ def plan_run(session: Session, run_id: str, req: PlanRequest) -> dict:
     }
 
 
-def _call_prompt_for(session: Session, edits: list[tuple[str, dict[str, str]]], info: dict[str, RowInfo],
-                     new_questions: list[dict], priorities: tuple[int, ...]) -> dict:
-    """The call-notes prompt for the planned selection, each track's questions in sheet order."""
-    ids = {qid for _, selection in edits for qid in selection}
+def call_prompt_run(session: Session, run_id: str, req: CallPromptRequest) -> dict:
+    """
+    The call-notes prompt as a 'Call prompt' tab of the recorded sheet, for the IM to copy from. Asked
+    for after the sheet is made, never before. Asking twice returns the same tab without new requests.
+    """
+    gen = _run(session, run_id, ("recorded",))
+    trace = dict(gen.trace)
+    sheet_url = (gen.output_ref or "").split("#")[0]
+    existing = trace.get("call_prompt_tab")
+    if existing:
+        return {"draft_id": run_id, "requests": [], "tab": existing["name"], "tab_sheet_id": existing["tab_sheet_id"],
+                "url": f"{sheet_url}#gid={existing['tab_sheet_id']}", "questions": existing["questions"],
+                "left_out": existing["left_out"], "priorities": existing["priorities"], "already_there": True}
+    tracks = trace["tracks"]
+    ids = {qid for t in tracks for qid in t.get("sheet_question_ids", [])}
     by_id = {q.question_id: q for q in session.scalars(select(Question).where(Question.question_id.in_(ids)))}
-    by_track = [(name, [by_id[qid] for qid in sorted(selection, key=lambda q: sort_key(q, info[q])) if qid in by_id])
-                for name, selection in edits]
-    return call_prompt(by_track[0][1], new_questions, priorities, tracks=by_track)
+    by_track = [(t["name"], [by_id[qid] for qid in t.get("sheet_question_ids", []) if qid in by_id]) for t in tracks]
+    new_in_sheet = set(trace.get("new_in_sheet", []))
+    new_questions = [{"id": g["id"], "question": g["question"]} for g in trace.get("gap_questions", []) if g["id"] in new_in_sheet]
+    prompt = call_prompt(by_track[0][1], new_questions, tuple(req.priorities), tracks=by_track)
+    if not prompt["text"]:
+        raise RunError(422, "No questions match those priorities, so there is nothing to put in the prompt.")
+    track_tabs = [t.get("tab_sheet_id") for t in tracks if t.get("tab_sheet_id") is not None]
+    [tab_id] = new_sheet_ids(list(req.sheet_ids) + track_tabs, 1)
+    positions = [req.sheet_ids.index(t) for t in track_tabs if t in req.sheet_ids]
+    index = max(positions) + 1 if positions else None
+    tab = {"name": CALL_PROMPT_TAB, "tab_sheet_id": tab_id, "questions": prompt["questions"],
+           "left_out": prompt["left_out"], "priorities": prompt["priorities"]}
+    gen.trace = {**trace, "call_prompt_tab": tab}
+    session.flush()
+    return {"draft_id": run_id, "requests": plan_call_prompt_tab(tab_id, prompt["text"], index), "tab": tab["name"],
+            "tab_sheet_id": tab_id, "url": f"{sheet_url}#gid={tab_id}", "questions": tab["questions"],
+            "left_out": tab["left_out"], "priorities": tab["priorities"], "already_there": False}
 
 
 def _reads_by_track(req: RecordRequest, tracks: list[dict]) -> dict[str, list[str]]:
@@ -446,7 +459,7 @@ def record_run(session: Session, settings: AppSettings, run_id: str, req: Record
     mismatches = {t["name"]: t["mismatches"] for t in recorded_tracks}
     gen.opportunity_id, gen.output_ref = opportunity.opportunity_id, req.sheet_url
     gen.trace = {**trace, "stage": "recorded", "tracks": recorded_tracks, "mismatches": mismatches,
-                 "queued": queued, "share_consent": req.share_new_questions}
+                 "queued": queued, "share_consent": req.share_new_questions, "new_in_sheet": sorted(new_in_first)}
     session.flush()
 
     by_id = {q.question_id: q for q in session.scalars(select(Question).where(Question.question_id.in_(set(all_in_sheet))))}
@@ -463,13 +476,6 @@ def record_run(session: Session, settings: AppSettings, run_id: str, req: Record
                           "mismatches": mismatches[name]})
     new_questions = [{"id": g["id"], "question": g["question"]} for g in trace.get("gap_questions", [])
                      if g["id"] in new_in_first]
-    questions_by_track = [(name, [by_id[i] for i in in_sheet if i in by_id]) for name, _, in_sheet, _ in by_track]
-    prompt_tab = trace.get("call_prompt_tab")
-    if prompt_tab:  # the prompt is in the sheet: give the link to its tab, not the text
-        prompt = {"tab": prompt_tab["name"], "url": f"{req.sheet_url.split('#')[0]}#gid={prompt_tab['tab_sheet_id']}",
-                  "questions": prompt_tab["questions"], "left_out": prompt_tab["left_out"], "priorities": prompt_tab["priorities"]}
-    else:
-        prompt = call_prompt(questions_by_track[0][1], new_questions, tuple(req.call_prompt_priorities), tracks=questions_by_track)
     return {
         "ok": not any(any(m.values()) for m in mismatches.values()),
         "merchant": merchant.name,
@@ -481,6 +487,5 @@ def record_run(session: Session, settings: AppSettings, run_id: str, req: Record
         "suggested_additions": len(new_questions),
         "queue": {"on": settings.FLAG_CANDIDATE_QUEUE, "shared": req.share_new_questions, "sent": queued},
         "mismatches": mismatches,
-        "call_prompt": prompt,
         "feedback_url": feedback_link(settings, run_id),
     }

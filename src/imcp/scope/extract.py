@@ -30,6 +30,9 @@ CONFIDENCE = ("high", "medium", "low")
 NEW_SUBSECTIONS = {"discovery": E.Subsection.discovery, "features_functionality": E.Subsection.features_functionality}
 TRUE_WORDS = {"true", "yes", "y", "in scope", "1"}
 FALSE_WORDS = {"false", "no", "n", "not in scope", "out of scope", "0"}
+# Said about any question, these are no answer: the cell stays empty and the question stays open.
+UNDECIDED = {"undecided", "not decided", "not decided yet", "tbd", "tbc", "to be decided", "to be confirmed",
+             "not discussed", "not yet discussed", "n/a", "na", "not applicable", "unknown", "unclear", "none given"}
 
 SYSTEM_PROMPT = """You help an Adyen implementation manager (IM) fill in the scoping question sheet for a merchant project.
 You get material the IM has from the merchant (call notes, a call summary or transcript, emails or documents),
@@ -37,10 +40,19 @@ the questions in the IM's sheet, and the other questions in our question bank.
 
 Answer from the material only:
 - Answer each question in the IM's sheet that the material answers. Leave out questions it doesn't answer and
-  anything that is still undecided. Never guess.
+  anything that is still undecided, 'to be confirmed', 'not discussed' or 'not applicable': those are no answer.
+  Never guess.
 - Answer one of the other bank questions only when the material answers it directly.
 - The material may list answers by question ID (for example from a call-notes tool given our questions). Use those
-  IDs, and treat 'not discussed' as no answer.
+  IDs, and treat 'not discussed' as no answer. Answer every listed ID that has an answer, in every section of the
+  sheet (Discovery and Features & Functionality alike).
+- The sheet tab you are filling is for one project track (named in the request). Material may be grouped by track
+  (headings like 'Track: US'). Take answers for this tab from its own track's section and from notes that are not
+  about a particular track. Ignore the sections of other tracks entirely: never put another track's facts in an
+  answer, never combine tracks into one answer ('US: ...; France: ...' is wrong), and never answer other bank
+  questions from another track's section.
+- Before writing a new question, check both lists: if a listed question covers the topic, even in other words
+  (for example 'Offline Processing' covers a remark about taking payments offline), answer that question instead.
 - Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
   options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
   your own words, at most 25 words.
@@ -52,8 +64,8 @@ Then list new questions: things the material raises that matter for scoping the 
 or a need or constraint the merchant raised) and that no question in either list covers, even in other words.
 Write each as a general scoping question an IM could ask any merchant, with no names or details of this merchant.
 Give its type (and options for a choice), the answer from the material if there is one, who raised it (im or merchant),
-its subsection (discovery or features_functionality), the ID of the closest bank question if one is related, and why it
-is new in at most 15 words. At most 8. Don't repeat the new questions already in the sheet.
+its subsection (discovery or features_functionality), the ID of the bank question nearest to the topic if there is one
+(closest_id), and why it is new in at most 15 words. At most 8. Don't repeat the new questions already in the sheet.
 
 Answer with one JSON object and nothing else:
 {"answers": [{"id": "ID-0000", "answer": "...", "source": "label of the material", "evidence": "...", "confidence": "high"}],
@@ -124,20 +136,35 @@ def _options_in(text: str, options: list[str]) -> tuple[list[str], list[str]]:
     return found, leftovers
 
 
+def _undecided(raw) -> bool:
+    return isinstance(raw, str) and one_line(raw, 60).casefold().strip(" .!").rstrip(".") in UNDECIDED
+
+
+def toggle_value(raw) -> str | None:
+    """TRUE/FALSE from a toggle answer: a yes/no word, or a sentence that starts with one ('Yes, web and apps')."""
+    if isinstance(raw, bool):
+        return "TRUE" if raw else "FALSE"
+    text = one_line(raw, 80).casefold().rstrip(".")
+    if text in TRUE_WORDS:
+        return "TRUE"
+    if text in FALSE_WORDS:
+        return "FALSE"
+    for phrase in sorted(FALSE_WORDS, key=len, reverse=True):  # "not in scope" before "no"
+        if re.match(rf"{re.escape(phrase)}(?!\w)", text):
+            return "FALSE"
+    for phrase in sorted(TRUE_WORDS, key=len, reverse=True):
+        if re.match(rf"{re.escape(phrase)}(?!\w)", text):
+            return "TRUE"
+    return None
+
+
 def normalize_answer(q: Question, raw) -> tuple[str | None, str | None]:
     """The answer in the question's format, and a note when it doesn't quite fit (it is kept anyway)."""
-    if raw is None or (isinstance(raw, str) and not raw.strip()) or raw == []:
+    if raw is None or (isinstance(raw, str) and not raw.strip()) or raw == [] or _undecided(raw):
         return None, None
     kind = E.QuestionType(q.type)
     if kind is E.QuestionType.toggle:
-        if isinstance(raw, bool):
-            return ("TRUE" if raw else "FALSE"), None
-        word = one_line(raw, 40).casefold().rstrip(".")
-        if word in TRUE_WORDS:
-            return "TRUE", None
-        if word in FALSE_WORDS:
-            return "FALSE", None
-        return None, None  # a toggle answered with anything else isn't an answer
+        return toggle_value(raw), None  # a toggle answered with anything but yes or no isn't an answer
     if kind is E.QuestionType.single_choice:
         text = one_line(raw[0] if isinstance(raw, list) and raw else raw, MAX_ANSWER)
         if (match := _match_option(text, q.options)) is not None:
@@ -182,17 +209,22 @@ def _source(value, labels: dict[str, str], fallback: str) -> str:
 
 def extract_answers(model: ChatModel | None, materials: list[Material], sheet_questions: list[Question],
                     other_questions: list[Question], existing_new: list[str], merchant_name: str | None = None,
-                    sanitize: bool = True) -> Extraction:
+                    sanitize: bool = True, track: str | None = None) -> Extraction:
     """
     sheet_questions  the bank questions in the IM's sheet: the ones to answer
     other_questions  the rest of the active bank: answered only when the material answers them directly
     existing_new     the wording of new questions already in the sheet, so they aren't suggested again
+    track            the tab's title (the project track this run fills), so material grouped by track is read right
     """
     if model is None:
         return Extraction(status="unavailable", note="Our model isn't configured (MODEL_BASE_URL, MODEL_NAME).")
     material_text = "\n\n".join(f'### {m.label} ({m.kind})\n"""\n{m.text.strip()}\n"""' for m in materials)
+    track_line = (f"This sheet tab is for the project track named {one_line(track, 100)!r}. Use that track's section of "
+                  "the material and the notes that apply to the whole project; ignore other tracks' sections.\n\n"
+                  if track else "")
     user = (
-        f"Questions in the IM's sheet (id | type | question | options):\n{question_lines(sheet_questions) or '(none)'}\n\n"
+        track_line
+        + f"Questions in the IM's sheet (id | type | question | options):\n{question_lines(sheet_questions) or '(none)'}\n\n"
         "Other bank questions. Answer these only if the material answers them directly "
         f"(id | type | question | options):\n{question_lines(other_questions) or '(none)'}\n\n"
         "New questions already in the sheet (don't list these again):\n"
@@ -213,9 +245,30 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
     others = {q.question_id: q for q in other_questions}
     result = Extraction(status="ok", model=model.model)
     dropped = {"unknown_id": 0, "repeated_id": 0, "not_an_answer": 0, "other_bank_limit": 0,
-               "repeats_a_question": 0, "new_limit": 0}
+               "repeats_a_question": 0, "new_limit": 0, "answered_bank_question": 0, "covered_by_bank": 0}
     seen: set[str] = set()
     other_count = 0
+
+    def add_answer(q: Question, value: str, source, evidence, confidence, problem) -> bool:
+        nonlocal other_count
+        if q.question_id in others:
+            if other_count >= MAX_OTHER_BANK:
+                dropped["other_bank_limit"] += 1
+                return False
+            other_count += 1
+        seen.add(q.question_id)
+        confidence = one_line(confidence, 10).casefold()
+        result.answers.append({
+            "id": q.question_id,
+            "in_sheet": q.question_id in in_sheet,
+            "answer": clean(value),
+            "source": _source(source, labels, fallback),
+            "evidence": clean(one_line(evidence, MAX_EVIDENCE)),
+            "confidence": confidence if confidence in CONFIDENCE else "medium",
+            "problem": problem,
+        })
+        return True
+
     for item in _as_list(data.get("answers")):
         if not isinstance(item, dict):
             continue
@@ -231,22 +284,7 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
         if value is None:
             dropped["not_an_answer"] += 1
             continue
-        if qid in others:
-            if other_count >= MAX_OTHER_BANK:
-                dropped["other_bank_limit"] += 1
-                continue
-            other_count += 1
-        seen.add(qid)
-        confidence = one_line(item.get("confidence"), 10).casefold()
-        result.answers.append({
-            "id": qid,
-            "in_sheet": qid in in_sheet,
-            "answer": clean(value),
-            "source": _source(item.get("source"), labels, fallback),
-            "evidence": clean(one_line(item.get("evidence"), MAX_EVIDENCE)),
-            "confidence": confidence if confidence in CONFIDENCE else "medium",
-            "problem": problem,
-        })
+        add_answer(q, value, item.get("source"), item.get("evidence"), item.get("confidence"), problem)
 
     known_texts = [q.text for q in sheet_questions] + [q.text for q in other_questions] + list(existing_new)
     for item in _as_list(data.get("new_questions")):
@@ -255,6 +293,20 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
         text = clean(scrub_name(one_line(item.get("question"), MAX_QUESTION), merchant_name))
         if not text:
             continue
+        # A "new" question whose nearest bank question covers it is an answer to that question, not a new row:
+        # the model names the bank question itself (closest_id). Only when the formats fit; else it stays new.
+        closest = one_line(item.get("closest_id"), 20)
+        covering = in_sheet.get(closest) or others.get(closest)
+        if covering is not None:
+            raw_answer = item.get("answer")
+            if closest in in_sheet and (raw_answer in (None, "", "null") or _undecided(raw_answer)):
+                dropped["covered_by_bank"] += 1  # no answer, and the sheet already asks the covering question
+                continue
+            if closest not in seen:
+                value = _answer_for_covering(covering, item)
+                if value is not None and add_answer(covering, value, item.get("source"), item.get("reason"), "medium", None):
+                    dropped["answered_bank_question"] += 1
+                    continue
         if any(same_question(text, known, SAME_QUESTION) for known in known_texts):
             dropped["repeats_a_question"] += 1
             continue
@@ -287,6 +339,27 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
         })
     result.dropped = {k: v for k, v in dropped.items() if v}
     return result
+
+
+def _answer_for_covering(q: Question, item: dict) -> str | None:
+    """
+    The answer a 'new' question gives to the bank question that covers it, in that question's format.
+    A toggle takes a yes/no; a free-text question takes the model's reason (what the merchant said) or
+    the answer text; a choice question only takes an answer that is one of its options. None when the
+    formats don't fit: the question then stays new.
+    """
+    kind = E.QuestionType(q.type)
+    answer = item.get("answer")
+    if answer in (None, "", "null") or _undecided(answer):
+        return None
+    if kind is E.QuestionType.toggle:
+        return toggle_value(answer) if one_line(item.get("type"), 20).casefold() == "toggle" else None
+    if kind is E.QuestionType.free_text:
+        reason = one_line(item.get("reason"), MAX_ANSWER)
+        text = reason if reason and toggle_value(answer) is not None else one_line(answer, MAX_ANSWER)
+        return text or None
+    value, problem = normalize_answer(q, answer)
+    return value if value is not None and problem is None else None
 
 
 def _as_list(value) -> list:

@@ -103,8 +103,9 @@ Keep it short:
 - the document, as a link on its name;
 - what was filled: the Discovery table rows and the Features table rows, the two solution subsections, the diagram (or that
   none matched this track and the placeholder was removed), the documentation links;
-- the **suggested answers used** (`suggested_used`): answers found from merchant material that the IM
-  hasn't confirmed in the sheet. Ask them to confirm those in the sheet or the document;
+- one line on where the answers came from: how many were the IM's own and how many came from merchant
+  material (`suggested_used`). Don't list the IDs and don't ask for confirmation: the IM changes anything
+  by asking, or in the sheet or the document;
 - the open priority-1 questions (up to 10, and how many in all): the proposal was written without them;
 - that the Stakeholders table, the Timeframe and the Conclusion are theirs to fill, and that the table of
   contents is refreshed by clicking it in the document and choosing update;

@@ -280,10 +280,8 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "header row (row 1, as read), the tab's basicFilter exactly as read if it has one (basic_filter), "
             "sheet_ids (every tab's sheetId in the copy, in tab order; needed with several tracks), and the IM's "
             "changes: remove_ids and add_ids apply to every track; `tracks` holds changes to one track only "
-            "(by name). NEW- IDs can be removed too. With call_prompt=true the batch also adds a 'Call prompt' tab "
-            "holding the call-notes prompt (priority-1 questions unless call_prompt_priorities says otherwise, [] "
-            "for all), so the IM copies it from the sheet. Returns `requests`: send them unchanged, in one Sheets "
-            "batch update on the copy. They rename the Project Scope tab to the first track, make a tab per further "
+            "(by name). NEW- IDs can be removed too. Returns `requests`: send them unchanged, in one Sheets batch "
+            "update on the copy. They rename the Project Scope tab to the first track, make a tab per further "
             "track, and in each tab delete the rows that aren't in that track, add a found_by column, order and "
             "group the rows by section, and keep the tab's filter. Never compute row numbers yourself."
         ),
@@ -299,16 +297,12 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         remove_ids: list[str] | None = None,
         add_ids: list[str] | None = None,
         tracks: list[TrackChangesArg] | None = None,
-        call_prompt: bool = False,
-        call_prompt_priorities: list[Literal[1, 2, 3]] | None = None,
     ) -> str:
         body = {
             "tab_sheet_id": tab_sheet_id, "column_count": column_count, "id_column": id_column,
             "header_row": header_row or [], "basic_filter": basic_filter or None, "sheet_ids": sheet_ids or [],
             "remove_ids": remove_ids or [], "add_ids": add_ids or [],
             "tracks": [t.model_dump() for t in tracks or []],
-            "call_prompt": call_prompt,
-            "call_prompt_priorities": [1] if call_prompt_priorities is None else call_prompt_priorities,
         }
         try:
             path = run_path(draft_id, "sheet-plan")
@@ -324,26 +318,43 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "column A of every track's tab read back after the edit (`tabs`, each with the tab's title; for a "
             "one-track scope, sheet_question_ids alone is fine). Records the run and the tracks, checks each tab "
             "against its track and returns a summary (counts by subsection and by how each question was found, "
-            "per track), any mismatches, the call_prompt (a link to the sheet's 'Call prompt' tab when the plan made "
-            "one, else the prompt text; priority 1 unless call_prompt_priorities says otherwise, [] for all) and the "
-            "feedback form link to show the IM. Pass share_new_questions=true only if the IM agreed to share drafted "
-            "questions for review."
+            "per track), any mismatches and the feedback form link to show the IM. Pass share_new_questions=true "
+            "only if the IM agreed to share drafted questions for review. The call-notes prompt is a separate step "
+            "the IM is offered afterwards (im_scope_call_prompt)."
         ),
     )
     async def im_scope_record(
         draft_id: str, merchant_name: str, sheet_id: str, sheet_url: str,
         sheet_question_ids: list[str] | None = None, tabs: list[TabArg] | None = None,
-        share_new_questions: bool = False, call_prompt_priorities: list[Literal[1, 2, 3]] | None = None,
+        share_new_questions: bool = False,
     ) -> str:
         body = {"merchant_name": merchant_name, "sheet_id": sheet_id, "sheet_url": sheet_url,
                 "sheet_question_ids": sheet_question_ids or [], "tabs": [t.model_dump() for t in tabs or []],
-                "share_new_questions": share_new_questions,
-                "call_prompt_priorities": [1] if call_prompt_priorities is None else call_prompt_priorities}
+                "share_new_questions": share_new_questions}
         try:
             path = run_path(draft_id, "record")
         except ValueError:
             return "draft_id should be the draft_id returned by im_scope_start."
         return await post(path, body)
+
+    @server.tool(
+        name="im_scope_call_prompt",
+        title="Add the call-notes prompt to the scope sheet (/create-scope, after the reply)",
+        description=(
+            "Only when the IM says yes to the offer after the sheet is made: adds a 'Call prompt' tab to the "
+            "recorded scope sheet holding the call-notes prompt (the scope's questions by ID, grouped by track; "
+            "priority 1 unless priorities says otherwise, [] for all), so the IM copies it from the sheet. Pass the "
+            "draft_id and sheet_ids (every tab's sheetId in the sheet now, in tab order). Returns `requests` to send "
+            "unchanged in one Sheets batch update, and `url`, the link to the new tab to show the IM. Asking again "
+            "returns the same tab with no requests."
+        ),
+    )
+    async def im_scope_call_prompt(draft_id: str, sheet_ids: list[int], priorities: list[Literal[1, 2, 3]] | None = None) -> str:
+        try:
+            path = run_path(draft_id, "call-prompt")
+        except ValueError:
+            return "draft_id should be the draft_id returned by im_scope_start."
+        return await post(path, {"sheet_ids": sheet_ids, "priorities": [1] if priorities is None else priorities}, compact=True)
 
     @server.tool(
         name="im_inputs_list",

@@ -9,7 +9,7 @@ from imcp.db import enums as E
 from imcp.db.models import Generation, Instance, Source
 from imcp.scope.additions import ADDITIONS_LABEL
 from imcp.scope.answers import AnswersRecordRequest, AnswersStartRequest, record_answers, start_answers
-from imcp.scope.runs import RunError, StartRequest, start_run
+from imcp.scope.runs import CallPromptRequest, RunError, StartRequest, call_prompt_run, start_run
 from tests.db.conftest import session_on
 from tests.db.test_scope import CAPITAL, COLUMN, SETTINGS, TOKENS, loaded, plan, record
 from tests.fakes import FakeModel
@@ -227,9 +227,11 @@ def test_topic_gaps_become_suggested_additions(session):
     assert tab.rows[-1][6] is None  # no priority, so a priority filter never hides it
     rec = record(session, out["draft_id"], sheet_question_ids=[v or "" for v in tab.column(0)])
     assert rec["ok"] and rec["suggested_additions"] == 1 and rec["queue"] == {"on": False, "shared": False, "sent": 0}
-    prompt = rec["call_prompt"]
-    assert prompt["priorities"] == [1] and prompt["text"].startswith("Answer these scoping questions")
-    assert "ID-0001: Project Background" in prompt["text"] and "NEW-0001: Do you run a loyalty" in prompt["text"]
+    # the call prompt comes afterwards, as a tab, and includes the drafted question the IM kept
+    prompt = call_prompt_run(session, out["draft_id"], CallPromptRequest(sheet_ids=[7]))
+    text = prompt["requests"][1]["updateCells"]["rows"][0]["values"][0]["userEnteredValue"]["stringValue"]
+    assert prompt["priorities"] == [1] and text.startswith("Answer these scoping questions")
+    assert "ID-0001: Project Background" in text and "NEW-0001: Do you run a loyalty" in text
 
 
 def test_topic_gaps_can_be_dropped_and_are_queued_when_on(session):

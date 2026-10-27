@@ -14,3 +14,4 @@ dist/
 
 # Local backups (keep these outside the repo if you can)
 git-history-backup*
+evals/results/

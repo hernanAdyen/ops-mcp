@@ -42,3 +42,8 @@ def test_several_tracks_get_a_heading_each_and_the_additions_at_the_end():
     assert out["questions"] == 6 and "grouped by project track" in out["text"]
     one = call_prompt([], tracks=[("Project Scope", QS)])
     assert one["text"] == call_prompt(QS)["text"]  # one track: as before, no heading
+
+
+def test_tracks_with_no_matching_question_give_no_text():
+    out = call_prompt([], priorities=(2,), tracks=[("Capital", QS[:1]), ("In-person UK", QS[1:2])])
+    assert out["text"] is None and out["questions"] == 0 and out["left_out"] == 2

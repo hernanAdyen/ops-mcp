@@ -9,8 +9,8 @@ from imcp.config import AppSettings
 from imcp.db import enums as E
 from imcp.db.models import Generation, Merchant, Opportunity, Question
 from imcp.scope.candidates import Tags, in_range, tag_matches
-from imcp.scope.runs import (PlanRequest, RecordRequest, RunError, StartRequest, TrackChanges, TrackIn, plan_run,
-                             record_run, start_run)
+from imcp.scope.runs import (CallPromptRequest, PlanRequest, RecordRequest, RunError, StartRequest, TrackChanges, TrackIn,
+                             call_prompt_run, plan_run, record_run, start_run)
 from tests.db.conftest import session_on
 from tests.fakes import FakeModel
 from tests.test_bank_parse import make_csv, row
@@ -358,16 +358,14 @@ def test_record_reads_every_tab_and_keeps_the_tracks(session):
     with pytest.raises(RunError) as err:
         record(session, out["draft_id"], tabs=tabs[:1])
     assert err.value.status == 422 and err.value.detail["missing_tabs"] == ["In-person UK"]
-    rec = record(session, out["draft_id"], tabs=tabs, call_prompt_priorities=[])
+    rec = record(session, out["draft_id"], tabs=tabs)
     assert rec["ok"] and rec["questions"] == 6 and [t["questions"] for t in rec["tracks"]] == [3, 3]
     assert rec["by_subsection"] == {"Introduction": 1, "Discovery": 3, "Features & Functionality": 2}
+    assert "call_prompt" not in rec  # offered afterwards, as its own step
     opp = session.scalar(select(Opportunity))
     assert [t["name"] for t in opp.tracks] == ["Capital", "In-person UK"] and opp.tracks[1]["channels"] == ["IPP"]
     assert opp.channels == [] and opp.pillars == [E.Pillar.PFS, E.Pillar.UC]  # the union; 'all' stays 'all'
     assert opp.categories == [E.Category.CAPITAL, E.Category.PAYIN]
-    text = rec["call_prompt"]["text"]
-    assert "Track: Capital" in text and "Track: In-person UK" in text and text.count("ID-0003:") == 2
-    assert text.count("ID-0001:") == 1 and rec["call_prompt"]["questions"] == 6
 
 
 def test_record_of_one_track_takes_the_plain_column(session):
@@ -424,27 +422,24 @@ def test_health_can_check_the_model(connection):
     assert body["model"]["ok"] is False
 
 
-# --- the call prompt as a tab of the sheet ------------------------------------------------------
+# --- the call prompt as a tab of the sheet, after record ----------------------------------------
 
-def test_plan_can_add_a_call_prompt_tab_and_record_links_to_it(session):
+def test_call_prompt_is_a_tab_added_after_record(session):
     out, _ = two_tracks(session)
-    planned, book = plan_two(session, out["draft_id"], call_prompt=True, call_prompt_priorities=[])
-    tab = planned["call_prompt_tab"]
-    assert tab["name"] == "Call prompt" and tab["tab_sheet_id"] == 1002 and tab["questions"] == 6
-    assert book.titles[1002] == "Call prompt" and book.order == [7, 1001, 1002]  # after the track tabs
+    _, book = plan_two(session, out["draft_id"])
+    tabs = [{"name": book.titles[sid], "sheet_question_ids": [v or "" for v in book.tabs[sid].column(0)]} for sid in (7, 1001)]
+    with pytest.raises(RunError, match="Plan the sheet edit first"):  # not before the run is recorded
+        call_prompt_run(session, out["draft_id"], CallPromptRequest(sheet_ids=[7, 1001]))
+    record(session, out["draft_id"], tabs=tabs)
+    out2 = call_prompt_run(session, out["draft_id"], CallPromptRequest(priorities=[], sheet_ids=[5, 7, 1001, 9]))
+    assert out2["tab"] == "Call prompt" and out2["tab_sheet_id"] == 1002 and out2["questions"] == 6 and out2["left_out"] == 0
+    assert out2["url"] == "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjK#gid=1002" and out2["already_there"] is False
+    assert out2["requests"][0]["addSheet"]["properties"]["index"] == 3  # right after the last track tab
+    book.apply(out2["requests"])
     text = book.tabs[1002].rows[0][0]
     assert text.startswith("Answer these scoping questions") and "Track: Capital" in text and "Track: In-person UK" in text
-    assert text.count("ID-0003:") == 2
-    tabs = [{"name": book.titles[sid], "sheet_question_ids": [v or "" for v in book.tabs[sid].column(0)]} for sid in (7, 1001)]
-    rec = record(session, out["draft_id"], tabs=tabs)
-    assert rec["ok"]
-    assert rec["call_prompt"] == {"tab": "Call prompt", "url": "https://docs.google.com/spreadsheets/d/1AbCdEfGhIjK#gid=1002",
-                                  "questions": 6, "left_out": 0, "priorities": "all"}
+    assert text.count("ID-0003:") == 2 and text.count("ID-0001:") == 1
     assert session.get(Generation, out["draft_id"]).trace["call_prompt_tab"]["tab_sheet_id"] == 1002
-
-
-def test_without_the_prompt_tab_the_plan_adds_nothing(session):
-    out, _ = two_tracks(session)
-    planned, book = plan_two(session, out["draft_id"])
-    assert planned["call_prompt_tab"] is None and book.order == [7, 1001]
-    assert not any("addSheet" in r for r in planned["requests"])
+    # asking again: the same tab, nothing to send
+    again = call_prompt_run(session, out["draft_id"], CallPromptRequest(sheet_ids=[5, 7, 1001, 1002, 9]))
+    assert again["already_there"] and again["requests"] == [] and again["url"].endswith("#gid=1002")

@@ -145,3 +145,58 @@ def test_extraction_asks_for_a_long_timeout():
 def test_answers_listed_by_id_are_used():
     _, model = run({"answers": []})
     assert "treat 'not discussed' as no answer" in model.calls[0][0]["content"]
+
+
+def test_toggle_sentences_starting_with_yes_or_no_count():
+    assert normalize_answer(SHEET[1], "Yes, web and apps separately") == ("TRUE", None)
+    assert normalize_answer(SHEET[1], "No tipping for v1") == ("FALSE", None)
+    assert normalize_answer(SHEET[1], "Not in scope for now") == ("FALSE", None)
+    assert normalize_answer(SHEET[1], "Yesterday they said maybe") == (None, None)  # 'yes' as a word only
+
+
+def test_undecided_answers_are_no_answer_for_any_type():
+    for raw in ("undecided", "Not decided yet.", "to be confirmed", "Not discussed", "N/A", "not applicable"):
+        assert normalize_answer(SHEET[0], raw) == (None, None), raw
+        assert normalize_answer(SHEET[2], raw) == (None, None), raw
+    assert normalize_answer(SHEET[0], "Per franchisee, to be confirmed") == ("Per franchisee, to be confirmed", None)
+
+
+def test_the_prompt_names_the_track():
+    _, model = run({"answers": [], "new_questions": []}, track="In-person FR")
+    user = model.calls[0][1]["content"]
+    assert user.startswith("This sheet tab is for the project track named 'In-person FR'")
+    assert "Ignore the sections of other tracks" in model.calls[0][0]["content"]
+    _, model = run({"answers": [], "new_questions": []})
+    assert not model.calls[0][1]["content"].startswith("This sheet tab")
+
+
+def test_a_new_question_covered_by_a_bank_question_becomes_its_answer():
+    reply = {"answers": [], "new_questions": [
+        {"question": "Do you want tipping on the terminal?", "type": "toggle", "answer": "yes",
+         "closest_id": "ID-0037", "reason": "Merchant wants tips at the counter", "raised_by": "merchant"},
+        {"question": "Which regions do you sell in?", "type": "free_text", "answer": "The US and Canada",
+         "closest_id": "ID-0001", "reason": "Regions mentioned on the call"},
+        {"question": "Do you need automated report ingestion?", "type": "toggle", "answer": "TRUE",
+         "closest_id": "ID-0096", "reason": "Daily SFTP report wanted"},
+        {"question": "Will you surcharge Amex?", "type": "toggle", "answer": "undecided", "closest_id": "ID-0037"},
+        {"question": "Do you need a loyalty program?", "type": "toggle", "answer": "TRUE", "closest_id": "ID-0050",
+         "reason": "Points program next year"},
+    ]}
+    result, _ = run(reply)
+    got = {a["id"]: a for a in result.answers}
+    assert got["ID-0037"]["answer"] == "TRUE" and got["ID-0037"]["evidence"] == "Merchant wants tips at the counter"
+    assert got["ID-0001"]["answer"] == "The US and Canada"  # free text takes the answer text
+    assert "ID-0096" not in got  # a toggle answer doesn't fit a single-choice question: stays new
+    assert [n["question"] for n in result.new_questions] == ["Do you need automated report ingestion?",
+                                                             "Do you need a loyalty program?"]
+    # the undecided surcharging question: its bank question is already in the sheet, so it is dropped
+    assert result.dropped == {"answered_bank_question": 2, "covered_by_bank": 1}
+
+
+def test_a_toggle_new_question_fills_a_free_text_bank_question_with_the_reason():
+    reply = {"answers": [], "new_questions": [
+        {"question": "Do you plan a points program?", "type": "toggle", "answer": "TRUE", "closest_id": "ID-0001",
+         "reason": "Launching a points program next year, wants in-store recognition"}]}
+    result, _ = run(reply)
+    assert result.answers[0]["id"] == "ID-0001"
+    assert result.answers[0]["answer"] == "Launching a points program next year, wants in-store recognition"

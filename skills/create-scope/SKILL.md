@@ -42,9 +42,6 @@ only for what's missing.
   - Subsections, priorities and platforms aren't asked: don't filter on them, unless the IM gave them
     in the command (e.g. `/create-scope Acme, BALANCE, P1 only`, or "discovery only"). Pass subsections
     as `introduction`, `discovery`, `features_functionality`, and priorities as 1, 2, 3.
-  - On the **first track's card** add a fourth question: "Add a call-notes prompt to the sheet, to
-    paste into Gong after a call?" with the options "Yes, priority-1 questions", "Yes, all questions"
-    and "No". Remember the answer for the plan (`call_prompt`, `call_prompt_priorities`).
 - **Context.** After the cards, unless the IM already gave it, ask in one short chat message for their
   notes on the merchant (e.g. "launching Capital for their sellers, migrating tokens from their current
   PSP"), or "none". The notes cover the whole project; the server uses them for every track. A card
@@ -102,13 +99,12 @@ to every track. If there are neither, go straight on.
    with the `id` header, with `''` for an empty row. Also read the **header row**: `'Project Scope'!1:1`.
 6. Call **`im_scope_sheet_plan`** with the `draft_id`, that `sheetId`, the column count, column A, the
    header row, the tab's `basicFilter` exactly as read (`basic_filter`; leave it out if there's none),
-   `sheet_ids`, the IM's `remove_ids`, `add_ids` and `tracks` changes, and `call_prompt` true if the IM
-   wanted the call-notes prompt (with `call_prompt_priorities: []` for all questions). If it refuses (for
-   example an unknown ID), tell the IM and fix that before changing anything.
+   `sheet_ids`, and the IM's `remove_ids`, `add_ids` and `tracks` changes. If it refuses (for example an
+   unknown ID), tell the IM and fix that before changing anything.
 7. Send the returned **`requests` unchanged, in one Sheets batch update** on the copy. Don't edit,
    reorder, split or recalculate them, and never work out row numbers yourself. The batch renames the
    Project Scope tab to the first track and makes a tab per further track (`new_tabs` says which), then
-   fills each tab from its own track, and adds the `Call prompt` tab if asked (`call_prompt_tab`).
+   fills each tab from its own track.
 8. **Read column A of every track's tab again**, the same way (`'<tab title>'!A:A`). The tab titles are
    the track names from the plan's `tracks`.
 9. **Consent.** If `im_scope_start` said `review_queue_on` and the first tab has drafted questions
@@ -125,7 +121,7 @@ to every track. If there are neither, go straight on.
 Keep it short:
 
 - the sheet, as a link on its name;
-- the tabs: one per track, named after it (with one track, just Project Scope), plus `Call prompt` if asked;
+- the tabs: one per track, named after it (with one track, just Project Scope);
 - per track, the number of questions, by section, and how they were found (tags, topic, added by you);
   each tab is grouped by section, each with a collapsible group;
 - if the plan's `filter` is `kept`: the tabs open with the master's filter on (e.g. P1 only), and
@@ -133,15 +129,26 @@ Keep it short:
 - that the `found_by` column says why each question is there, and the IM can delete rows they don't need;
 - the Suggested additions at the end of the first tab, if any: questions drafted for topics the bank
   doesn't cover. The IM keeps, edits or deletes them in the sheet;
-- if the IM wanted the call-notes prompt: one line with a link to it, **"Call prompt for Gong"** on
-  `call_prompt.url` (the sheet's `Call prompt` tab). After a call they copy it from that tab into their
-  call-notes tool and bring the output to `/source-scope-answers`, which matches answers by ID. Say how
-  many questions it holds (`call_prompt.questions`). Never print the prompt text in chat. If they said
-  no, don't mention it;
 - that `/source-scope-answers` fills the answers from merchant material (that output, notes, a call
   summary, emails) when they have some, one tab at a time;
 - any mismatch `im_scope_record` reports (per track), and what it means;
 - the feedback form link from `im_scope_record`, asking the IM to rate this run.
+
+## 6. Offer the call-notes prompt
+
+After the reply, and only then, ask in one short message: "Do you want a call-notes prompt to paste
+into Gong after the call? It lists the scope's questions by ID: the priority-1 ones, or all of them."
+If the IM says no, or doesn't answer, stop. If yes:
+
+1. Call **`im_scope_call_prompt`** with the `draft_id`, `sheet_ids` (every tab's sheetId in the sheet
+   now, in tab order: the ones you read earlier plus the plan's `new_tabs`) and `priorities` (`[1]`, or
+   `[]` for all).
+2. Send its **`requests` unchanged, in one Sheets batch update** on the sheet (nothing to send if
+   `already_there`).
+3. Reply with one line: **"Call prompt for Gong"** as a link on `url` (the sheet's `Call prompt` tab),
+   and how many questions it holds (`questions`). After a call they copy it from that tab into their
+   call-notes tool and bring the output to `/source-scope-answers`, which matches answers by ID. Never
+   print the prompt text in chat.
 
 ## Rules
 
