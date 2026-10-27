@@ -24,15 +24,35 @@ def _hint(q: Question) -> str:
     return ""
 
 
+TRACKS_NOTE = ("The questions are grouped by project track. The same question can appear under more than one "
+               "track: answer it for each track.")
+
+
 def call_prompt(questions: list[Question], new_questions: list[dict] | None = None,
-                priorities: tuple[int, ...] = (1,)) -> dict:
-    """questions in sheet order; new_questions [{id, question}] from Suggested additions."""
-    chosen = [q for q in questions if not priorities or q.priority in priorities]
-    lines = [f"{q.question_id}: {one_line(q.text, 300)}{_hint(q)}" for q in chosen]
-    lines += [f"{n['id']}: {one_line(n['question'], 300)}" for n in new_questions or []]
+                priorities: tuple[int, ...] = (1,), tracks: list[tuple[str, list[Question]]] | None = None) -> dict:
+    """
+    questions      in sheet order (one track); new_questions [{id, question}] from Suggested additions
+    tracks         [(track name, its questions in sheet order)] when the scope has several tracks; then
+                   `questions` is ignored and each track gets a heading
+    """
+    parts = tracks if tracks and len(tracks) > 1 else [(None, questions if not tracks else tracks[0][1])]
+    lines, asked, total = [], 0, 0
+    for name, qs in parts:
+        chosen = [q for q in qs if not priorities or q.priority in priorities]
+        total += len(qs)
+        if not chosen and name is not None:
+            continue
+        if name is not None:
+            lines += ([""] if lines else []) + [f"Track: {name}"]
+        lines += [f"{q.question_id}: {one_line(q.text, 300)}{_hint(q)}" for q in chosen]
+        asked += len(chosen)
+    extra = [f"{n['id']}: {one_line(n['question'], 300)}" for n in new_questions or []]
+    if extra:
+        lines += ([""] + ["Suggested additions:"] if len(parts) > 1 else []) + extra
+    intro = INTRO + (" " + TRACKS_NOTE if len(parts) > 1 else "")
     return {
         "priorities": list(priorities) or "all",
-        "questions": len(lines),
-        "left_out": len(questions) - len(chosen),
-        "text": INTRO + "\n\n" + "\n".join(lines) if lines else None,
+        "questions": asked + len(extra),
+        "left_out": total - asked,
+        "text": intro + "\n\n" + "\n".join(lines) if lines else None,
     }

@@ -28,3 +28,17 @@ def test_all_priorities():
 
 def test_nothing_to_ask():
     assert call_prompt([], priorities=(1,))["text"] is None
+
+
+def test_several_tracks_get_a_heading_each_and_the_additions_at_the_end():
+    out = call_prompt([], [{"id": "NEW-0001", "question": "Loyalty?"}], priorities=(),
+                      tracks=[("Ecommerce US", QS[:2]), ("In-person UK", QS[1:])])
+    body = out["text"].split("\n\n", 1)[1]
+    assert body.splitlines() == ["Track: Ecommerce US", "ID-0001: What regions are in scope?", "ID-0037: Tipping (yes / no)", "",
+                                 "Track: In-person UK", "ID-0037: Tipping (yes / no)",
+                                 "ID-0069: Primary network connection? (Ethernet / Wi-Fi / Cellular)",
+                                 "ID-0005: User platforms (iOS / Android / Web, more than one)", "",
+                                 "Suggested additions:", "NEW-0001: Loyalty?"]
+    assert out["questions"] == 6 and "grouped by project track" in out["text"]
+    one = call_prompt([], tracks=[("Project Scope", QS)])
+    assert one["text"] == call_prompt(QS)["text"]  # one track: as before, no heading

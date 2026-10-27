@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from imcp.app.db import get_session
+from imcp.app.jobs import job_reply
 from imcp.scope.answers import AnswersRecordRequest, AnswersStartRequest, record_answers, start_answers
 from imcp.scope.runs import RunError
 
@@ -24,18 +25,6 @@ def start(req: AnswersStartRequest, request: Request, session: Session = Depends
         raise HTTPException(exc.status, exc.detail) from exc
     session.commit()
     return result
-
-
-def _job_reply(request: Request, job_id: str, wait: float) -> dict:
-    try:
-        state, result = request.app.state.jobs.wait(job_id, wait)
-    except RunError as exc:
-        raise HTTPException(exc.status, exc.detail) from exc
-    if state == "unknown":
-        raise HTTPException(404, {"error": "There's no job with that ID. It may have expired: start again."})
-    if state == "pending":
-        return {"job_id": job_id, "pending": True}
-    return {"job_id": job_id, "pending": False, **result}
 
 
 @router.post("/jobs")
@@ -54,12 +43,12 @@ def start_job(req: AnswersStartRequest, request: Request, wait: float = 40) -> d
         finally:
             session.close()
 
-    return _job_reply(request, app.state.jobs.submit(work), wait)
+    return job_reply(request, app.state.jobs.submit(work), wait)
 
 
 @router.get("/jobs/{job_id}")
 def job(job_id: str, request: Request, wait: float = 40) -> dict:
-    return _job_reply(request, job_id, wait)
+    return job_reply(request, job_id, wait)
 
 
 @router.post("/runs/{run_id}/record")

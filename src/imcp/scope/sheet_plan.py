@@ -12,9 +12,14 @@ Steps 1-2 were tested against the Sheets connector on 2026-10-24.
 
 If the tab has a basic filter (e.g. the master shows P1 only), it is cleared first and put back at the
 end over the new rows: while a filter hides rows, Sheets sorts only the visible ones (seen 2026-10-25).
+
+A scope with several project tracks gets one tab per track (`plan_tracks`): the master's Project Scope
+tab is renamed to the first track, duplicated once per further track before any row is touched, and
+then every tab is edited from its own selection, as above.
 """
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from imcp.db import enums as E
@@ -241,3 +246,61 @@ def plan_sheet_edit(tab_sheet_id: int, column_count: int, id_column: list[str], 
                      for label, header, _, count in layout],  # rows as shown in Sheets (1-based)
         "missing_from_sheet": sorted(set(keep) - set(ids)),
     }
+
+
+# --------------------------------------------------------------------------- tracks
+
+
+@dataclass(frozen=True)
+class TrackEdit:
+    """One track's tab: its name (the tab title), the IDs to keep with their found_by labels, and the
+    cell dicts for a 'Suggested additions' section, if this tab gets one."""
+
+    name: str
+    keep: dict[str, str]
+    additions: list[dict] | None = None
+
+
+def new_sheet_ids(existing: Iterable[int], n: int, start: int = 1001) -> list[int]:
+    """Numeric sheetIds for new tabs that don't clash with the copy's own tabs."""
+    taken, out, candidate = set(existing), [], start
+    while len(out) < n:
+        if candidate not in taken:
+            out.append(candidate)
+        candidate += 1
+    return out
+
+
+def plan_tracks(tab_sheet_id: int, sheet_ids: list[int], column_count: int, id_column: list[str],
+                tracks: list[TrackEdit], info: dict[str, RowInfo], header_row: list[str] | None = None,
+                basic_filter: dict | None = None) -> dict:
+    """
+    One batch that turns the copy's Project Scope tab into one tab per track.
+    tab_sheet_id  the copy's Project Scope tab: it becomes the first track's tab
+    sheet_ids     every tab of the copy, in tab order (so new tabs get free IDs and sit next to the first)
+    The other arguments are as for plan_sheet_edit; id_column is the Project Scope tab's column A, which
+    every duplicate starts from, because the duplicates are made before any row is deleted.
+    Returns the requests and, per tab, what plan_sheet_edit reports.
+    """
+    if not tracks:
+        raise SheetPlanError("a scope needs at least one track")
+    names = [t.name.casefold() for t in tracks]
+    if len(set(names)) != len(names):
+        raise SheetPlanError("track names must be different from each other")
+    if len(tracks) > 1 and tab_sheet_id not in sheet_ids:
+        raise SheetPlanError("sheet_ids must list the copy's tabs (sheets.properties.sheetId), including the Project Scope tab")
+    position = sheet_ids.index(tab_sheet_id) if tab_sheet_id in sheet_ids else 0
+    tab_ids = [tab_sheet_id] + new_sheet_ids(sheet_ids, len(tracks) - 1)
+
+    requests: list[dict] = [{"updateSheetProperties": {
+        "properties": {"sheetId": tab_sheet_id, "title": tracks[0].name}, "fields": "title"}}]
+    for i, (track, sid) in enumerate(zip(tracks[1:], tab_ids[1:]), start=1):
+        requests.append({"duplicateSheet": {"sourceSheetId": tab_sheet_id, "insertSheetIndex": position + i,
+                                            "newSheetId": sid, "newSheetName": track.name}})
+    tabs = []
+    for track, sid in zip(tracks, tab_ids):
+        plan = plan_sheet_edit(sid, column_count, id_column, track.keep, info, header_row,
+                               basic_filter=basic_filter, additions=track.additions)
+        requests += plan["requests"]
+        tabs.append({"name": track.name, "tab_sheet_id": sid, **{k: v for k, v in plan.items() if k != "requests"}})
+    return {"requests": requests, "tabs": tabs}

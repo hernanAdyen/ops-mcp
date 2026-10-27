@@ -4,12 +4,12 @@ import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from imcp.db import enums as E
 from imcp.db.models import (
-    EMBEDDING_DIM, Asset, Base, Edge, Instance, InstanceLink, Merchant, Node, Opportunity, Question, Source,
+    Asset, Base, Edge, Instance, InstanceLink, Merchant, Node, Opportunity, Question, Source,
 )
 
 
@@ -132,18 +132,21 @@ def test_edges_unique_and_no_self_loops(session):
     session.flush()
 
 
-def test_embedding_search_full_size(session):
+DIM = 1536  # text-embedding-3-small; the column takes any size
+
+
+def test_embedding_search_by_cosine_distance(session):
     def unit(i):
-        v = [0.0] * EMBEDDING_DIM
+        v = [0.0] * DIM
         v[i] = 1.0
         return v
 
-    near = [0.0] * EMBEDDING_DIM
+    near = [0.0] * DIM
     near[0], near[1] = 0.9, math.sqrt(1 - 0.81)
     session.add_all([
-        node(key="x", embedding=unit(0), embedding_model="qwen3-embedding-8b"),
-        node(key="y", embedding=unit(1), embedding_model="qwen3-embedding-8b"),
-        node(key="z", embedding=near, embedding_model="qwen3-embedding-8b"),
+        node(key="x", embedding=unit(0), embedding_model="text-embedding-3-small"),
+        node(key="y", embedding=unit(1), embedding_model="text-embedding-3-small"),
+        node(key="z", embedding=near, embedding_model="text-embedding-3-small"),
     ])
     session.flush()
     ranked = session.execute(
@@ -152,10 +155,20 @@ def test_embedding_search_full_size(session):
     assert ranked == ["x", "z"]
 
 
-def test_embedding_needs_model_and_right_size(session):
-    fails(session, node(key="m", embedding=[0.0] * EMBEDDING_DIM))  # no model recorded
-    fails(session, node(key="s", embedding=[0.0] * 10, embedding_model="m"),
-          error=(IntegrityError, DBAPIError, ValueError))
+def test_embeddings_of_different_sizes_can_coexist(session):
+    """The embedding model is a setting; each model has its own size and records its name."""
+    session.add_all([
+        node(key="small", embedding=[1.0] * DIM, embedding_model="text-embedding-3-small"),
+        node(key="large", embedding=[1.0] * 4096, embedding_model="qwen3-embedding-8b"),
+    ])
+    session.flush()
+    sizes = dict(session.execute(select(Node.canonical_key, func.vector_dims(Node.embedding))).all())
+    assert sizes == {"small": DIM, "large": 4096}
+
+
+def test_embedding_needs_its_model_recorded(session):
+    fails(session, node(key="m", embedding=[0.0] * DIM))  # no model recorded
+    fails(session, node(key="n", embedding_model="m"))  # model without an embedding
 
 
 # --- evidence ---------------------------------------------------------------------------------

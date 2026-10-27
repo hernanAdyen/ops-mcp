@@ -19,9 +19,6 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from imcp.db import enums as E
 
-# qwen3-embedding-8b, full size. Searched exactly (no index) for v1.
-EMBEDDING_DIM = 4096
-
 NAMING = {
     "ix": "ix_%(table_name)s_%(column_0_N_name)s",
     "uq": "uq_%(table_name)s_%(column_0_N_name)s",
@@ -60,6 +57,7 @@ def updated_at() -> Mapped[datetime]:
 
 EMPTY_ARRAY = sa.text("'{}'")
 EMPTY_JSON = sa.text("'{}'::jsonb")
+EMPTY_LIST = sa.text("'[]'::jsonb")
 
 
 # --------------------------------------------------------------------------- question bank
@@ -152,6 +150,9 @@ class Opportunity(Base):
     pillars: Mapped[list[E.Pillar]] = mapped_column(enum_array(E.Pillar, "pillar"), server_default=EMPTY_ARRAY, nullable=False)
     categories: Mapped[list[E.Category]] = mapped_column(enum_array(E.Category, "category"), server_default=EMPTY_ARRAY, nullable=False)
     platforms: Mapped[list[E.Platform]] = mapped_column(enum_array(E.Platform, "platform"), server_default=EMPTY_ARRAY, nullable=False)
+    # The project tracks from /create-scope: [{"name", "channels", "pillars", "categories", "platforms",
+    # "priorities", "subsections"}], one per tab of the scope sheet, in tab order. The tags above are their union.
+    tracks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, server_default=EMPTY_LIST, nullable=False)
     created_at: Mapped[datetime] = created_at()
 
 
@@ -173,7 +174,10 @@ class Node(Base):
     merged_into: Mapped[uuid.UUID | None] = mapped_column(sa.ForeignKey("node.node_id"))
     valid_from: Mapped[datetime] = created_at()
     valid_to: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM))
+    # Any size: the embedding model is a setting and each model has its own size. `embedding_model`
+    # says which made it, and a search only compares nodes made by the query's model. Searched
+    # exactly (no index) for v1.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector())
     embedding_model: Mapped[str | None] = mapped_column(sa.Text)
     embedded_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at()

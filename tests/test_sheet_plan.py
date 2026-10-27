@@ -1,9 +1,11 @@
 import random
+from copy import deepcopy
 
 import pytest
 
 from imcp.db import enums as E
-from imcp.scope.sheet_plan import FOUND_BY, RowInfo, SheetPlanError, layout_requests, out_of_order, plan_sheet_edit, sort_key
+from imcp.scope.sheet_plan import (FOUND_BY, RowInfo, SheetPlanError, TrackEdit, layout_requests, new_sheet_ids,
+                                   out_of_order, plan_sheet_edit, plan_tracks, sort_key)
 
 TAB = 2039431867
 COLS = 12
@@ -89,6 +91,9 @@ class FakeTab:
                 self.bold_rows.add(rng["startRowIndex"])
             elif kind == "addDimensionGroup":
                 self.groups.append((rng["startIndex"], rng["endIndex"]))
+            elif kind == "updateSheetProperties" and "title" in body["properties"]:
+                assert body["properties"]["sheetId"] == self.tab and body["fields"] == "title"
+                self.title = body["properties"]["title"]
             elif kind == "updateSheetProperties":
                 self.control_after = body["properties"]["gridProperties"]["rowGroupControlAfter"]
             else:
@@ -99,6 +104,46 @@ class FakeTab:
 
     def column(self, index: int) -> list:
         return [row[index] for row in self.rows]
+
+
+def sheet_id_of(body: dict) -> int:
+    for key in ("sheetId",):
+        if key in body:
+            return body[key]
+    for path in (("range",), ("filter", "range"), ("properties",)):
+        node = body
+        for key in path:
+            node = node.get(key, {})
+        if "sheetId" in node:
+            return node["sheetId"]
+    raise AssertionError(f"no sheetId in {body}")
+
+
+class FakeBook:
+    """A spreadsheet with several tabs: plays duplicateSheet and renames like Sheets does, and hands every
+    other request to the tab it names."""
+
+    def __init__(self, tabs: dict[int, FakeTab], titles: dict[int, str] | None = None):
+        self.tabs = dict(tabs)
+        self.order = list(tabs)
+        self.titles = dict(titles or {})
+
+    def apply(self, requests: list[dict]) -> "FakeBook":
+        for r in requests:
+            (kind, body), = r.items()
+            if kind == "duplicateSheet":
+                source, new = self.tabs[body["sourceSheetId"]], body["newSheetId"]
+                assert new not in self.tabs, f"sheetId {new} is taken"
+                copy = FakeTab([], width=1, tab=new, basic_filter=deepcopy(source.filter))
+                copy.rows = deepcopy(source.rows)
+                self.tabs[new] = copy
+                self.order.insert(body["insertSheetIndex"], new)
+                self.titles[new] = body["newSheetName"]
+            elif kind == "updateSheetProperties" and "title" in body["properties"]:
+                self.titles[body["properties"]["sheetId"]] = body["properties"]["title"]
+            else:
+                self.tabs[sheet_id_of(body)].apply([r])
+        return self
 
 
 def ids(n):
@@ -320,3 +365,73 @@ def test_the_batch_is_much_smaller_when_the_master_is_in_order():
     unsorted = json.dumps(plan_sheet_edit(TAB, COLS, ["id"] + shuffled, keep, info)["requests"])
     in_order = json.dumps(plan_sheet_edit(TAB, COLS, ["id"] + sorted_ids, keep, info)["requests"])
     assert len(in_order) < len(unsorted) * 0.7  # random picks; real scopes keep rows in runs and save more
+
+
+# --- tracks: one tab per track -------------------------------------------------------------------
+
+def test_two_tracks_get_their_own_tabs_from_one_batch():
+    column = ["id"] + ids(8)
+    tracks = [TrackEdit("Ecommerce US", {"ID-0005": "tags", "ID-0001": "tags", "ID-0003": "topic: tokens"}),
+              TrackEdit("In-person UK", {"ID-0006": "tags", "ID-0004": "tags"})]
+    out = plan_tracks(TAB, [99, TAB], COLS, column, tracks, INFO)
+    book = FakeBook({99: FakeTab(["id"], tab=99), TAB: FakeTab(column)}).apply(out["requests"])
+    assert book.titles == {TAB: "Ecommerce US", 1001: "In-person UK"} and book.order == [99, TAB, 1001]
+    assert book.tabs[TAB].column(0) == ["id", "Introduction", "ID-0005", "Discovery", "ID-0003",
+                                        "Features & Functionality", "ID-0001"]
+    assert book.tabs[1001].column(0) == ["id", "Discovery", "ID-0004", "Features & Functionality", "ID-0006"]
+    assert book.tabs[1001].column(COLS) == [FOUND_BY, None, "tags", None, "tags"]
+    assert book.tabs[99].rows == [["id"] + [None] * (COLS - 1)]  # other tabs are left alone
+    assert [(t["name"], t["tab_sheet_id"], t["rows_kept"]) for t in out["tabs"]] == [("Ecommerce US", TAB, 3), ("In-person UK", 1001, 2)]
+    # the duplicates are made before any row is touched, so they all start from the master's rows
+    kinds = [next(iter(r)) for r in out["requests"]]
+    assert kinds[:2] == ["updateSheetProperties", "duplicateSheet"] and "deleteDimension" not in kinds[:2]
+
+
+def test_one_track_is_the_plain_edit_plus_the_tabs_name():
+    column = ["id"] + ids(4)
+    keep = {"ID-0004": "tags", "ID-0001": "tags"}
+    out = plan_tracks(TAB, [], COLS, column, [TrackEdit("Project Scope", keep)], INFO)
+    plain = plan_sheet_edit(TAB, COLS, column, keep, INFO)
+    assert out["requests"][0] == {"updateSheetProperties": {"properties": {"sheetId": TAB, "title": "Project Scope"},
+                                                            "fields": "title"}}
+    assert out["requests"][1:] == plain["requests"]
+    tab = FakeTab(column).apply(out["requests"])
+    assert tab.title == "Project Scope" and tab.column(0) == ["id", "Discovery", "ID-0004", "Features & Functionality", "ID-0001"]
+
+
+def test_the_suggested_additions_go_where_the_track_says():
+    column = ["id"] + ids(4)
+    header = ["id", "enum", "question"] + [""] * (COLS - 3)
+    extra = [{"id": "NEW-0001", "question": "Do you run a loyalty program?", "found_by": "topic gap: loyalty"}]
+    tracks = [TrackEdit("A", {"ID-0001": "tags"}, extra), TrackEdit("B", {"ID-0004": "tags"})]
+    out = plan_tracks(TAB, [TAB], COLS, column, tracks, INFO, header)
+    book = FakeBook({TAB: FakeTab(column)}).apply(out["requests"])
+    assert book.tabs[TAB].column(0)[-1] == "NEW-0001" and "NEW-0001" not in book.tabs[1001].column(0)
+    assert out["tabs"][0]["suggested_additions"] == {"label_row": 4, "rows": 1} and out["tabs"][1]["suggested_additions"] is None
+
+
+def test_a_filtered_master_keeps_its_filter_on_every_tab():
+    column = ["id"] + ids(8)
+    flt = {"range": {"sheetId": TAB, "startRowIndex": 0, "endRowIndex": 9, "startColumnIndex": 0, "endColumnIndex": COLS},
+           "filterSpecs": [{"columnIndex": 6, "filterCriteria": {"hiddenValues": ["2", "3"]}}]}
+    tracks = [TrackEdit("A", {"ID-0001": "tags", "ID-0003": "tags"}), TrackEdit("B", {"ID-0004": "tags", "ID-0007": "tags"})]
+    out = plan_tracks(TAB, [TAB], COLS, column, tracks, INFO, basic_filter=flt)
+    book = FakeBook({TAB: FakeTab(column, basic_filter=flt)}).apply(out["requests"])
+    for sid, rows in ((TAB, 5), (1001, 4)):  # header + section headings + questions on that tab
+        assert book.tabs[sid].filter["range"]["sheetId"] == sid and book.tabs[sid].filter["range"]["endRowIndex"] == rows
+
+
+def test_new_tab_ids_avoid_the_copys_own():
+    assert new_sheet_ids([1001, 1002, 7], 2) == [1003, 1004]
+    out = plan_tracks(7, [7, 1001], COLS, ["id"] + ids(2), [TrackEdit("A", {"ID-0001": "t"}), TrackEdit("B", {"ID-0002": "t"})], INFO)
+    assert out["tabs"][1]["tab_sheet_id"] == 1002
+
+
+def test_tracks_are_checked_before_anything_is_planned():
+    column = ["id"] + ids(2)
+    with pytest.raises(SheetPlanError, match="at least one"):
+        plan_tracks(TAB, [TAB], COLS, column, [], INFO)
+    with pytest.raises(SheetPlanError, match="different"):
+        plan_tracks(TAB, [TAB], COLS, column, [TrackEdit("A", {"ID-0001": "t"}), TrackEdit("a", {"ID-0002": "t"})], INFO)
+    with pytest.raises(SheetPlanError, match="sheet_ids"):
+        plan_tracks(TAB, [], COLS, column, [TrackEdit("A", {"ID-0001": "t"}), TrackEdit("B", {"ID-0002": "t"})], INFO)

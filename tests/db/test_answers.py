@@ -90,6 +90,19 @@ def test_answers_fill_the_sheet_and_suggest_additions(session):
     assert rec["feedback_url"].endswith("entry.1=" + out["draft_id"])
 
 
+def test_a_run_is_on_one_named_tab(session):
+    tab, _ = scope_sheet(session)
+    out, rec = run_answers(session, tab)
+    assert out["summary"]["tab"] == "Project Scope" and rec["tab"] == "Project Scope"
+    trace = session.get(Generation, out["draft_id"]).trace
+    assert trace["tab_title"] == "Project Scope" and trace["tab_sheet_id"] == 7
+    out2 = start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, tab_title="In-person UK", tab_sheet_id=7))
+    assert out2["summary"]["tab"] == "In-person UK"
+    with pytest.raises(RunError) as err:
+        start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, tab_title="Capital", id_column=["ID-0001"]))
+    assert "'Capital' tab" in err.value.detail["error"]
+
+
 def test_the_material_and_answers_are_never_stored(session):
     tab, _ = scope_sheet(session)
     out, _ = run_answers(session, tab, settings=QUEUE_ON)
@@ -203,8 +216,7 @@ LOYALTY = FakeModel({"topics": ["loyalty"], "additions": [],
 
 def test_topic_gaps_become_suggested_additions(session):
     out = start_run(loaded(session), SETTINGS, LOYALTY, StartRequest(tags=CAPITAL, context="They want loyalty points"))
-    assert out["topic_matching"]["gap_questions"] == [{"id": "NEW-0001", "topic": "loyalty",
-                                                       "question": "Do you run a loyalty or rewards program?"}]
+    assert out["gap_questions"] == [{"id": "NEW-0001", "topic": "loyalty", "question": "Do you run a loyalty or rewards program?"}]
     planned = plan(session, out["draft_id"], header_row=HEADER)
     assert planned["suggested_additions"] == {"label_row": 6, "rows": 1}
     tab = FakeTab(COLUMN, width=12, tab=7)
@@ -223,7 +235,7 @@ def test_topic_gaps_become_suggested_additions(session):
 def test_topic_gaps_can_be_dropped_and_are_queued_when_on(session):
     out = start_run(loaded(session), QUEUE_ON, LOYALTY, StartRequest(tags=CAPITAL, context="They want loyalty points"))
     dropped = plan(session, out["draft_id"], header_row=HEADER, remove_ids=["NEW-0001"])
-    assert dropped["removed_ids"] == ["NEW-0001"] and dropped["suggested_additions"] is None
+    assert dropped["tracks"][0]["removed_ids"] == ["NEW-0001"] and dropped["suggested_additions"] is None
     kept = plan(session, out["draft_id"], header_row=HEADER)
     tab = FakeTab(COLUMN, width=12, tab=7)
     tab.rows[0] = list(HEADER)

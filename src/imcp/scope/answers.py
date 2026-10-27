@@ -1,7 +1,8 @@
 """/source-scope-answers in two calls. The IM reviews the result in their own sheet.
 
-  start   the sheet as read + the IM's merchant material -> our model finds answers and new
-          questions -> one exact Sheets batch that writes them into Project Scope
+  start   one track's tab as read + the IM's merchant material -> our model finds answers and new
+          questions -> one exact Sheets batch that writes them into that tab (a scope with several
+          tracks has a tab per track: the skill runs this once per tab)
   record  read-back check, the deal (opportunity), the review queue (behind FLAG_CANDIDATE_QUEUE),
           the open priority-1 questions for the next call, and the feedback link
 
@@ -26,7 +27,7 @@ from imcp.scope.answers_plan import REVIEW_COLUMNS, SheetRead, plan_answers
 from imcp.scope.candidates import bank_status
 from imcp.scope.extract import MAX_MATERIAL_CHARS, Material, extract_answers
 from imcp.scope.queue import add_candidates, observe_im_review, sha256
-from imcp.scope.runs import RunError, feedback_link, normalise_name
+from imcp.scope.runs import DEFAULT_TRACK, RunError, feedback_link, normalise_name
 
 COMMAND = "source-scope-answers"
 FOUND_IN_MATERIAL, FOUND_NEW = "answered in material", "new question"
@@ -47,6 +48,8 @@ class NewRowIn(BaseModel):
 class AnswersStartRequest(BaseModel):
     sheet_id: str = Field(min_length=10, max_length=200)
     merchant_name: str | None = Field(default=None, max_length=200)
+    tab_title: str = Field(default=DEFAULT_TRACK, min_length=1, max_length=100,
+                           description="The tab being filled: the track's name")
     tab_sheet_id: int
     column_count: int = Field(ge=1)
     row_count: int = Field(ge=1)
@@ -73,11 +76,12 @@ class AnswersRecordRequest(BaseModel):
 
 def _sheet_read(req: AnswersStartRequest) -> SheetRead:
     """Checks what the skill read, and returns it below the header row."""
+    tab = req.tab_title.strip()
     if not req.id_column or req.id_column[0].strip().lower() not in ("id", "question_id"):
-        raise RunError(422, "id_column must be column A of the Project Scope tab, starting with its 'id' header.")
+        raise RunError(422, f"id_column must be column A of the {tab!r} tab, starting with its 'id' header.")
     names = [h.strip().lower() for h in req.header_row]
     if not names or names[0] not in ("id", "question_id"):
-        raise RunError(422, "header_row must be row 1 of the Project Scope tab, as read.")
+        raise RunError(422, f"header_row must be row 1 of the {tab!r} tab, as read.")
     if "answer" not in names:
         raise RunError(422, "This tab has no 'answer' column, so there's nowhere to write answers.")
     columns: dict[str, list[str]] = {}
@@ -102,9 +106,11 @@ def _opportunity(session: Session, sheet_id: str) -> tuple[Opportunity | None, M
     return opp, (session.get(Merchant, opp.merchant_id) if opp else None)
 
 
-def _earlier_runs(session: Session, sheet_id: str) -> list[Generation]:
-    return list(session.scalars(select(Generation).where(
-        Generation.command == COMMAND, Generation.trace["sheet_id"].astext == sheet_id)))
+def _earlier_runs(session: Session, sheet_id: str, tab_sheet_id: int) -> list[Generation]:
+    """Earlier runs on the same tab (runs from before tabs were named count for every tab)."""
+    runs = session.scalars(select(Generation).where(
+        Generation.command == COMMAND, Generation.trace["sheet_id"].astext == sheet_id))
+    return [g for g in runs if g.trace.get("tab_sheet_id", tab_sheet_id) == tab_sheet_id]
 
 
 def start_answers(session: Session, settings: AppSettings, model, req: AnswersStartRequest) -> dict:
@@ -155,7 +161,8 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
                           "source": item["source"], "status": "suggested", "ai_note": note})
         new_rows.append({"id": new_id, **item, "source_kind": kind_of.get(item["source"].casefold(), materials[0].kind)})
 
-    added_before = {qid for g in _earlier_runs(session, req.sheet_id) for qid in g.trace.get("added_bank_ids", [])}
+    added_before = {qid for g in _earlier_runs(session, req.sheet_id, req.tab_sheet_id)
+                    for qid in g.trace.get("added_bank_ids", [])}
     plan = plan_answers(sheet, in_sheet, additions, label_needed(sheet.ids, added_before))
     merge = plan["merge"]
     open_p1 = [q.question_id for q in sheet_questions if q.priority == 1 and q.question_id not in merge.answered]
@@ -168,6 +175,8 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
         trace={
             "stage": "planned",
             "sheet_id": req.sheet_id,
+            "tab_title": req.tab_title.strip(),
+            "tab_sheet_id": req.tab_sheet_id,
             "merchant_name": None if opp else merchant_name,  # only needed to create the deal at record
             "material": [{"kind": m.kind, "chars": len(m.text), "sha256": sha256(m.text)} for m in materials],
             "extraction": extraction.summary(),
@@ -192,6 +201,7 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
         "draft_id": str(gen.generation_id),
         "requests": plan["requests"],
         "summary": {
+            "tab": req.tab_title.strip(),
             "model": extraction.model,
             "filled": len(merge.filled),
             "agreed_with_yours": len(merge.agreed),
@@ -214,7 +224,8 @@ def record_answers(session: Session, settings: AppSettings, run_id: str, req: An
     gen = _get_run(session, run_id)
     trace = gen.trace
     if not req.id_column or req.id_column[0].strip().lower() not in ("id", "question_id"):
-        raise RunError(422, "id_column must be column A of the Project Scope tab, starting with its 'id' header.")
+        raise RunError(422, f"id_column must be column A of the {trace.get('tab_title', DEFAULT_TRACK)!r} tab, "
+                            "starting with its 'id' header.")
     present = {v.strip() for v in req.id_column[1:]}
     expected = trace["added_bank_ids"] + [r["id"] for r in trace["new_rows"]]
     missing = [x for x in expected if x not in present]
@@ -248,6 +259,7 @@ def record_answers(session: Session, settings: AppSettings, run_id: str, req: An
     return {
         "ok": not missing,
         "sheet_url": req.sheet_url,
+        "tab": trace.get("tab_title", DEFAULT_TRACK),
         "filled": len(trace["filled_ids"]),
         "conflicts": len(trace["conflict_ids"]),
         "added": {"from_bank": len(trace["added_bank_ids"]), "new_questions": len(trace["new_rows"])},

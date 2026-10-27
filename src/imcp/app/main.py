@@ -11,10 +11,11 @@ from imcp import SERVICE_NAME, SERVICE_VERSION
 from imcp.app.answers_api import router as answers_router
 from imcp.app.bank_api import router as bank_router
 from imcp.app.db import check_db, create_db_engine
+from imcp.app.graph_api import router as graph_router
 from imcp.app.jobs import JobStore
 from imcp.app.scope_api import router as scope_router
 from imcp.config import AppSettings, describe_config
-from imcp.llm import ModelClient
+from imcp.llm import EmbeddingClient, ModelClient
 
 FROM_SETTINGS: Any = object()
 
@@ -24,6 +25,7 @@ def create_app(
     db_check: Callable[[], dict] | None = None,
     session_factory: Callable[[], Session] | None = None,
     model: Any = FROM_SETTINGS,  # a ModelClient (or a stand-in in tests); None = no model
+    embedder: Any = FROM_SETTINGS,  # an EmbeddingClient (or a stand-in in tests); None = no embeddings
 ) -> FastAPI:
     settings = settings or AppSettings()
     if db_check is None or session_factory is None:
@@ -38,9 +40,11 @@ def create_app(
     app.state.session_factory = session_factory
     app.state.jobs = JobStore()
     app.state.model = ModelClient.from_settings(settings) if model is FROM_SETTINGS else model
+    app.state.embedder = EmbeddingClient.from_settings(settings) if embedder is FROM_SETTINGS else embedder
     app.include_router(bank_router)
     app.include_router(scope_router)
     app.include_router(answers_router)
+    app.include_router(graph_router)
 
     @app.get("/health")
     def health(check_model: bool = False) -> JSONResponse:
@@ -55,6 +59,8 @@ def create_app(
         if check_model:
             m = app.state.model
             body["model"] = m.ping() if m is not None else {"ok": False, "error": "MODEL_BASE_URL or MODEL_NAME not set"}
+            e = app.state.embedder
+            body["embeddings"] = e.ping() if e is not None else {"ok": False, "error": "EMBEDDING_MODEL not set"}
         return JSONResponse(body, status_code=200 if database["ok"] else 503)
 
     return app

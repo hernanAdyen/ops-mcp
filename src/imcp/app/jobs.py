@@ -47,3 +47,20 @@ class JobStore:
         cutoff = time.monotonic() - KEEP_SECONDS
         for job_id in [j for j, (f, t) in self._jobs.items() if f.done() and t < cutoff]:
             del self._jobs[job_id]
+
+
+def job_reply(request, job_id: str, wait: float) -> dict:
+    """The HTTP reply for a job: its result, or {pending: true}. Used by the scope and answers routers."""
+    from fastapi import HTTPException
+
+    from imcp.scope.runs import RunError
+
+    try:
+        state, result = request.app.state.jobs.wait(job_id, wait)
+    except RunError as exc:
+        raise HTTPException(exc.status, exc.detail) from exc
+    if state == "unknown":
+        raise HTTPException(404, {"error": "There's no job with that ID. It may have expired: start again."})
+    if state == "pending":
+        return {"job_id": job_id, "pending": True}
+    return {"job_id": job_id, "pending": False, **result}

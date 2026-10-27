@@ -32,6 +32,7 @@ def inputs_dir(settings: McpSettings) -> Path:
 # each call waits at most this long, then returns the job ID to ask again with.
 WAIT_SECONDS = 40
 
+DOC_RULES_FILE = "adyen-doc-pages.csv"  # in data/graph/: which Adyen doc pages go into the graph
 TEXT_SUFFIXES = {".txt", ".md", ".vtt", ".srt", ".csv", ".json", ".eml"}
 MAX_INPUT_BYTES = 600_000
 Kind = Literal["transcript", "summary", "notes", "email", "document"]
@@ -52,6 +53,33 @@ class FileArg(BaseModel):
 class NewRowArg(BaseModel):
     id: str = Field(description="The row's ID in column A, e.g. NEW-0003")
     question: str = Field(description="Its text in the question column, as it is now")
+
+
+class TrackArg(BaseModel):
+    """One project track and its tags. An empty list means all values."""
+
+    name: str = Field(description="The track's name, e.g. 'Ecommerce US'. It becomes the tab title.")
+    channels: list[E.Channel] = Field(default_factory=list)
+    pillars: list[E.Pillar] = Field(default_factory=list)
+    categories: list[E.Category] = Field(default_factory=list)
+    platforms: list[E.Platform] = Field(default_factory=list)
+    priorities: list[Literal[1, 2, 3]] = Field(default_factory=list)
+    subsections: list[E.Subsection] = Field(default_factory=list)
+
+    def body(self) -> dict:
+        tags = {k: v for k, v in self.model_dump(mode="json").items() if k != "name"}
+        return {"name": self.name, "tags": tags}
+
+
+class TrackChangesArg(BaseModel):
+    name: str = Field(description="The track's name, as given to im_scope_start")
+    remove_ids: list[str] = Field(default_factory=list)
+    add_ids: list[str] = Field(default_factory=list)
+
+
+class TabArg(BaseModel):
+    name: str = Field(description="The tab's title (the track's name)")
+    sheet_question_ids: list[str] = Field(description="Its column A, read back after the batch, starting with 'id'")
 
 
 def read_input(folder: Path, name: str) -> str:
@@ -115,6 +143,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
 
     async def job_reply(method: str, path: str, body: dict | None = None) -> str:
         """A job on the app server: its result, or pending with the job ID to ask again with."""
+        wait_tool = {"/scope/": "im_scope_wait", "/graph/": "im_graph_wait"}.get(path[:7], "im_answers_wait")
         try:
             res = await call(method, path, body, timeout=WAIT_SECONDS + 20, params={"wait": WAIT_SECONDS})
         except Exception as exc:
@@ -124,7 +153,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         data = res.json()
         if data.get("pending"):
             return json.dumps({"pending": True, "job_id": data["job_id"],
-                               "next": "Our model is still working. Call im_answers_wait with this job_id."})
+                               "next": f"Our model is still working. Call {wait_tool} with this job_id."})
         return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
     @server.tool(
@@ -178,19 +207,23 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         name="im_scope_start",
         title="Start a scope (/create-scope step 1)",
         description=(
-            "Starts a /create-scope run. The server selects the bank questions that match the IM's tags and, "
-            "if the IM gave context, our model adds questions on topics the context mentions. Pass the IM's "
-            "context as they wrote it; it is used for matching and never stored. An empty list for a tag means "
-            "all values; a question with no value for a tag applies to everyone; priorities and subsections "
-            "limit everything. Returns a draft_id, counts of the tag matches, the questions added by topic "
-            "(with reasons, to show the IM for confirmation), questions drafted for topics no bank question covers "
-            "(gap_questions, with NEW- IDs, added under 'Suggested additions') and master_sheet_url, the master "
-            "bank to copy."
+            "Starts a /create-scope run. A scope has one or more project tracks (e.g. 'Ecommerce US' and "
+            "'In-person payments UK'), each with its own tags and its own tab in the sheet. For one track, pass "
+            "the tags directly; for several, pass `tracks` (name + tags each) and leave the tags empty. The server "
+            "selects the bank questions that match each track's tags and, if the IM gave context, our model adds "
+            "questions on topics the context mentions, per track. Pass the IM's context as they wrote it; it is "
+            "used for matching and never stored. An empty list for a tag means all values; a question with no "
+            "value for a tag applies to everyone; priorities and subsections limit everything. Returns a draft_id, "
+            "per track the counts of tag matches and the questions added by topic (with reasons, to show the IM "
+            "for confirmation), questions drafted for topics no bank question covers (gap_questions, with NEW- IDs, "
+            "added under 'Suggested additions' in the first tab) and master_sheet_url, the master bank to copy. "
+            f"If it returns pending with a job_id (our model is still working), call im_scope_wait."
         ),
     )
     async def im_scope_start(
         context: str | None = None,
         merchant_name: str | None = None,
+        tracks: list[TrackArg] | None = None,
         channels: list[E.Channel] | None = None,
         pillars: list[E.Pillar] | None = None,
         categories: list[E.Category] | None = None,
@@ -202,8 +235,24 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "channels": channels or [], "pillars": pillars or [], "categories": categories or [],
             "platforms": platforms or [], "priorities": priorities or [], "subsections": subsections or [],
         }
-        body = {"tags": tags, "context": context, "merchant_name": merchant_name}
-        return await post("/scope/runs", body, timeout=150)
+        body = {"tags": tags, "tracks": [t.body() for t in tracks or []], "context": context,
+                "merchant_name": merchant_name}
+        return await job_reply("POST", "/scope/jobs", body)
+
+    @server.tool(
+        name="im_scope_wait",
+        title="Wait for im_scope_start to finish",
+        description=(
+            "When im_scope_start returns pending with a job_id, call this with the job_id. It waits up to "
+            f"{WAIT_SECONDS} seconds and returns the same result im_scope_start would have, or pending again."
+        ),
+    )
+    async def im_scope_wait(job_id: str) -> str:
+        try:
+            uuid.UUID(job_id)
+        except ValueError:
+            return "job_id should be the job_id returned by im_scope_start."
+        return await job_reply("GET", f"/scope/jobs/{job_id}")
 
     @server.tool(
         name="im_scope_sheet_plan",
@@ -212,11 +261,12 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "After copying the master bank: give the draft_id, the copy's Project Scope tab sheetId and "
             "columnCount, its column A exactly as read (starting with the 'id' header, '' for empty cells), its "
             "header row (row 1, as read), the tab's basicFilter exactly as read if it has one (basic_filter), "
-            "and any questions the IM dropped (remove_ids, NEW- IDs included) or asked to add by ID (add_ids). "
-            "Returns `requests`: send "
-            "them unchanged, in one Sheets batch update on the copy. They delete the rows that aren't in the "
-            "scope, add a found_by column, order and group the rows by section, and keep the tab's filter. "
-            "Never compute row numbers yourself."
+            "sheet_ids (every tab's sheetId in the copy, in tab order; needed with several tracks), and the IM's "
+            "changes: remove_ids and add_ids apply to every track; `tracks` holds changes to one track only "
+            "(by name). NEW- IDs can be removed too. Returns `requests`: send them unchanged, in one Sheets batch "
+            "update on the copy. They rename the Project Scope tab to the first track, make a tab per further "
+            "track, and in each tab delete the rows that aren't in that track, add a found_by column, order and "
+            "group the rows by section, and keep the tab's filter. Never compute row numbers yourself."
         ),
     )
     async def im_scope_sheet_plan(
@@ -226,13 +276,16 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         id_column: list[str],
         header_row: list[str] | None = None,
         basic_filter: dict | None = None,
+        sheet_ids: list[int] | None = None,
         remove_ids: list[str] | None = None,
         add_ids: list[str] | None = None,
+        tracks: list[TrackChangesArg] | None = None,
     ) -> str:
         body = {
             "tab_sheet_id": tab_sheet_id, "column_count": column_count, "id_column": id_column,
-            "header_row": header_row or [], "basic_filter": basic_filter or None,
+            "header_row": header_row or [], "basic_filter": basic_filter or None, "sheet_ids": sheet_ids or [],
             "remove_ids": remove_ids or [], "add_ids": add_ids or [],
+            "tracks": [t.model_dump() for t in tracks or []],
         }
         try:
             path = run_path(draft_id, "sheet-plan")
@@ -245,19 +298,23 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         title="Record the scope (/create-scope step 3)",
         description=(
             "After the batch update: give the draft_id, the merchant name, the new sheet's ID and link, and "
-            "its column A read back after the edit. Records the run, checks the sheet against the scope and "
-            "returns a summary (counts by subsection and by how each question was found), any mismatches, "
-            "a call_prompt (the scope's questions by ID, for the IM to paste into their call-notes tool; priority 1 "
-            "unless call_prompt_priorities says otherwise, [] for all) and the feedback form link to show the IM. "
-            "Pass share_new_questions=true only if the IM agreed to share drafted questions for review."
+            "column A of every track's tab read back after the edit (`tabs`, each with the tab's title; for a "
+            "one-track scope, sheet_question_ids alone is fine). Records the run and the tracks, checks each tab "
+            "against its track and returns a summary (counts by subsection and by how each question was found, "
+            "per track), any mismatches, a call_prompt (the scope's questions by ID, grouped by track, for the IM "
+            "to paste into their call-notes tool; priority 1 unless call_prompt_priorities says otherwise, [] for "
+            "all) and the feedback form link to show the IM. Pass share_new_questions=true only if the IM agreed "
+            "to share drafted questions for review."
         ),
     )
     async def im_scope_record(
-        draft_id: str, merchant_name: str, sheet_id: str, sheet_url: str, sheet_question_ids: list[str],
+        draft_id: str, merchant_name: str, sheet_id: str, sheet_url: str,
+        sheet_question_ids: list[str] | None = None, tabs: list[TabArg] | None = None,
         share_new_questions: bool = False, call_prompt_priorities: list[Literal[1, 2, 3]] | None = None,
     ) -> str:
         body = {"merchant_name": merchant_name, "sheet_id": sheet_id, "sheet_url": sheet_url,
-                "sheet_question_ids": sheet_question_ids, "share_new_questions": share_new_questions,
+                "sheet_question_ids": sheet_question_ids or [], "tabs": [t.model_dump() for t in tabs or []],
+                "share_new_questions": share_new_questions,
                 "call_prompt_priorities": [1] if call_prompt_priorities is None else call_prompt_priorities}
         try:
             path = run_path(draft_id, "record")
@@ -288,7 +345,8 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         name="im_answers_start",
         title="Find scope answers in merchant material (/source-scope-answers step 1)",
         description=(
-            "Give the scope sheet as read (its file ID; the Project Scope tab's sheetId, columnCount and rowCount; "
+            "Give the scope sheet as read (its file ID; the tab being filled: its title (tab_title, the track's "
+            "name; a one-track scope has the tab Project Scope), sheetId, columnCount and rowCount; "
             "the header row; column A; and `columns`: the answer column plus any source, confidence, status and "
             "ai_note columns, each as read starting with its header), the NEW- rows with their current question "
             "text, the tab's basicFilter if it has one, and the merchant material: pasted text as `material`, or "
@@ -311,6 +369,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         new_rows: list[NewRowArg] | None = None,
         basic_filter: dict | None = None,
         merchant_name: str | None = None,
+        tab_title: str = "Project Scope",
     ) -> str:
         pieces = [m.model_dump() for m in material or []]
         folder = inputs_dir(settings)
@@ -323,7 +382,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             return ("Give the merchant material: paste it as `material`, or save long material as a text file in "
                     f"{folder} and pass it as `files`.")
         body = {
-            "sheet_id": sheet_id, "merchant_name": merchant_name, "tab_sheet_id": tab_sheet_id,
+            "sheet_id": sheet_id, "merchant_name": merchant_name, "tab_title": tab_title, "tab_sheet_id": tab_sheet_id,
             "column_count": column_count, "row_count": row_count, "header_row": header_row,
             "id_column": id_column, "columns": columns,
             "new_rows": [r.model_dump() for r in new_rows or []], "basic_filter": basic_filter or None,
@@ -365,6 +424,46 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             return "draft_id should be the draft_id returned by im_answers_start."
         return await post(path, {"sheet_url": sheet_url, "id_column": id_column,
                                  "share_new_questions": share_new_questions})
+
+    @server.tool(
+        name="im_graph_load_docs",
+        title="Load the Adyen doc pages into the graph (admin)",
+        description=(
+            "Loads the Adyen documentation pages into the IM MCP's graph as asset nodes (link, title, one-line "
+            "description, tags, embedding; never the page content). The app server reads the docs index and the rules "
+            f"file from the repo's data/graph/ folder (default {DOC_RULES_FILE}; no other files can be read). By default "
+            "this is a dry run: it reports new, changed, deprecated and restored pages and changes nothing. Always show "
+            "the dry-run report to the user, and only call again with apply=true after they explicitly confirm. If it "
+            "returns pending with a job_id, call im_graph_wait."
+        ),
+    )
+    async def im_graph_load_docs(file: str | None = None, apply: bool = False) -> str:
+        try:
+            path = pick_csv(data_dir(settings) / "graph", file or DOC_RULES_FILE)
+        except (ValueError, FileNotFoundError) as exc:
+            return str(exc)
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(timespec="seconds")
+        body = {
+            "rules_csv": path.read_text(encoding="utf-8-sig"),
+            "source_ref": f"{path.name} (modified {modified})",
+            "apply": apply,
+        }
+        return await job_reply("POST", "/graph/loads/docs", body)
+
+    @server.tool(
+        name="im_graph_wait",
+        title="Wait for a graph load to finish",
+        description=(
+            "When im_graph_load_docs returns pending with a job_id, call this with the job_id. It waits up to "
+            f"{WAIT_SECONDS} seconds and returns the load report, or pending again."
+        ),
+    )
+    async def im_graph_wait(job_id: str) -> str:
+        try:
+            uuid.UUID(job_id)
+        except ValueError:
+            return "job_id should be the job_id returned by im_graph_load_docs."
+        return await job_reply("GET", f"/graph/jobs/{job_id}")
 
     return server
 

@@ -90,11 +90,14 @@ def question_lines(questions: list[dict]) -> str:
 
 
 def match_topics(model: ChatModel | None, notes: str | None, questions: list[dict],
-                 merchant_name: str | None = None, selected: list[dict] | None = None) -> TopicResult:
+                 merchant_name: str | None = None, selected: list[dict] | None = None,
+                 track: str | None = None) -> TopicResult:
     """
     questions  the ones the tags didn't select: the only ones the model may add
     selected   the tag matches, shown read-only so the model can tell what's already covered
     Both are dicts with id, question, priority, subsection and tags.
+    track      a line naming the project track this list is for (e.g. "In-person payments UK: channels
+               IPP"), when the scope has several, so the notes' other tracks don't leak in
     """
     if not notes or not notes.strip():
         return TopicResult(status="skipped", note="No context from the IM, so only the tag matches are used.")
@@ -103,8 +106,10 @@ def match_topics(model: ChatModel | None, notes: str | None, questions: list[dic
     if not questions:
         return TopicResult(status="ok", model=model.model, note="Every question in range was already selected by tags.")
 
+    about = (f"This list is for the project track \"{track}\". The notes may cover other tracks too: add only "
+             "questions that belong to this track.\n\n") if track else ""
     user = (
-        f'IM notes:\n"""\n{notes.strip()}\n"""\n\n'
+        f'IM notes:\n"""\n{notes.strip()}\n"""\n\n' + about +
         "Already in the scope, selected by the IM's tags. Do not choose these; use them only to judge what is covered "
         f"(id | priority | subsection | question | tags):\n{question_lines(selected or []) or '(none)'}\n\n"
         f"Other questions, the only ones you may add (id | priority | subsection | question | tags):\n{question_lines(questions)}"

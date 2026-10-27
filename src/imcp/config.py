@@ -41,7 +41,14 @@ class AppSettings(_Base):
     MODEL_BASE_URL: AnyHttpUrl | None = None
     MODEL_NAME: str | None = None
     MODEL_API_KEY: str | None = None
+    # Embeddings (OpenAI-compatible /embeddings). The URL and key fall back to the chat model's.
     EMBEDDING_MODEL: str | None = None
+    EMBEDDING_BASE_URL: AnyHttpUrl | None = None
+    EMBEDDING_API_KEY: str | None = None
+
+    # The index of the Adyen docs (llms.txt): one line per page with its title and description.
+    # Read by the doc page loader, never stored.
+    DOCS_INDEX_URL: AnyHttpUrl | None = None
 
     # Feature flags
     FLAG_RECOMMENDER: Literal["curated", "graph", "both"] = "curated"
@@ -90,12 +97,15 @@ def describe_config(s: AppSettings) -> dict:
             "proposalMaster": is_set(s.PROPOSAL_MASTER_URL),
             "proposalsDriveFolder": is_set(s.PROPOSALS_DRIVE_FOLDER_URL),
             "feedbackForm": is_set(s.FEEDBACK_FORM_URL),
+            "docsIndex": is_set(s.DOCS_INDEX_URL),
         },
         "model": {
             "baseUrl": is_set(s.MODEL_BASE_URL),
             "name": is_set(s.MODEL_NAME),
             "apiKey": is_set(s.MODEL_API_KEY),
             "embeddingModel": is_set(s.EMBEDDING_MODEL),
+            "embeddingBaseUrl": is_set(s.EMBEDDING_BASE_URL) or is_set(s.MODEL_BASE_URL),
+            "embeddingApiKey": is_set(s.EMBEDDING_API_KEY) or is_set(s.MODEL_API_KEY),
         },
         "flags": {
             "recommender": s.FLAG_RECOMMENDER,

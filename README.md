@@ -35,6 +35,8 @@ Fill in `.env`. Every variable is explained in `.env.example`. The ones you must
 | `POSTGRES_ADMIN_PASSWORD`, `APP_DB_PASSWORD` | Passwords for the local database (make them up) |
 | `QUESTION_BANK_URL` | Link to the master question bank sheet |
 | `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_API_KEY` | Your model. OpenAI: `https://api.openai.com/v1`, e.g. `gpt-4.1-mini`, your key |
+| `EMBEDDING_MODEL` | The embedding model for the graph, e.g. `text-embedding-3-small`. Called at `MODEL_BASE_URL` + `/embeddings` with `MODEL_API_KEY`, unless `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` are set |
+| `DOCS_INDEX_URL` | The Adyen docs index the doc page loader reads: `https://docs.adyen.com/llms.txt` |
 | `FEEDBACK_FORM_URL` | The feedback form (optional) |
 
 **Images and packages.** Leave `PYTHON_IMAGE`, `POSTGRES_IMAGE` and `UV_DEFAULT_INDEX` blank to use the
