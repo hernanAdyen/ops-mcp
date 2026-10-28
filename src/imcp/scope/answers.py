@@ -194,9 +194,11 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     fresh = [m for m in req.material if sha256(m.text) not in used]
     materials = [Material(m.label.strip(), m.kind, m.text) for m in fresh]
     source_of = {m.label.strip().casefold(): m.source() for m in fresh}
+    current_answers = sheet.values("answer")
+    current = {qid: current_answers[i] for i, qid in enumerate(sheet.ids) if qid in bank and current_answers[i]}
     extraction = extract_answers(model, materials, sheet_questions, others,
                                  [r.question for r in req.new_rows if r.question.strip()], merchant_name,
-                                 sanitize=settings.FLAG_SANITIZE, track=req.tab_title.strip())
+                                 sanitize=settings.FLAG_SANITIZE, track=req.tab_title.strip(), current=current)
     if extraction.status != "ok":
         raise RunError(503, f"{extraction.note} Nothing was written to the sheet.")
 
@@ -275,6 +277,7 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
             "already_used": [m.label.strip() for m in repeats],  # skipped: used on this tab before
             "filled": len(merge.filled),
             "agreed_with_yours": len(merge.agreed),
+            "agreed_ids": merge.agreed,
             "confirmed_yours": len(merge.confirmed),
             "conflicts": [{"id": c["id"], "question": text[c["id"]], "yours": c["yours"], "found": c["found"],
                            "source": c["source"]} for c in merge.conflicts],

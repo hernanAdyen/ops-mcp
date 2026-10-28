@@ -217,7 +217,7 @@ on. With one track the headings read "Project".
 | `src/imcp/scope/topics.py` | Topic matching with our model; each question line carries the bank's `purpose` |
 | `src/imcp/scope/runs.py` | `/ops-create-scope` start, plan and record, per track |
 | `src/imcp/scope/sheet_plan.py` | The `/ops-create-scope` Sheets batch: a tab per track, deletions, order, sections, groups, filter |
-| `src/imcp/scope/extract.py` | Answer extraction with our model (each question line carries its `purpose`), and checking and scrubbing what it returns |
+| `src/imcp/scope/extract.py` | Answer extraction with our model (each question line carries its `purpose` and, when the sheet already answers it, the current answer, which the model confirms with `same`), and checking and scrubbing what it returns |
 | `src/imcp/scope/answers.py` | `/ops-answer-scope` start and record: the transcript flag, material already used on the tab (by hash), the dated `source`, the Scope log |
 | `src/imcp/scope/answers_plan.py` | The `/ops-answer-scope` Sheets batch: the merge rules over meetings (`suggested`, `confirmed`, `conflict`) and the Scope log tab (`appendCells`, so no row arithmetic) |
 | `src/imcp/scope/additions.py` | The Suggested additions section, shared by both commands |

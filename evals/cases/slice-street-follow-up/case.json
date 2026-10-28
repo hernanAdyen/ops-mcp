@@ -1,0 +1,50 @@
+{
+  "merchant": "Slice Street Pizza",
+  "material": {"file": "material.md", "label": "Follow-up call summary", "kind": "summary", "date": "2026-10-27"},
+  "covered_by_bank": ["ID-0079", "ID-0099", "ID-0057", "ID-0046"],
+  "tabs": [
+    {
+      "name": "US",
+      "ids": ["ID-0083", "ID-0084", "ID-0001", "ID-0002", "ID-0003", "ID-0004", "ID-0077", "ID-0082", "ID-0085", "ID-0086",
+              "ID-0091", "ID-0093", "ID-0096", "ID-0097", "ID-0098", "ID-0132", "ID-0137", "ID-0019", "ID-0050", "ID-0075",
+              "ID-0078", "ID-0079", "ID-0080", "ID-0088", "ID-0094", "ID-0099", "ID-0031", "ID-0032", "ID-0057", "ID-0058",
+              "ID-0060", "ID-0076", "ID-0081", "ID-0100", "ID-0005", "ID-0018", "ID-0036", "ID-0138", "ID-0046", "ID-0053",
+              "ID-0051", "ID-0052", "ID-0054", "ID-0055", "ID-0059", "ID-0061", "ID-0062"],
+      "current": {
+        "ID-0083": "Slice Street US runs online ordering via own website and apps, currently with legacy US acquirer; franchisees own stores; central team owns online payments; want one provider for US webshop and apps",
+        "ID-0084": "Go live before Super Bowl (early Feb); reduce declines; migrate stored cards; simplify reconciliation across franchisees",
+        "ID-0001": "United States only for online track",
+        "ID-0002": "Visa, Mastercard, Amex, Discover, Apple Pay, Google Pay, PayPal; Venmo maybe later",
+        "ID-0003": "USD",
+        "ID-0004": "USD",
+        "ID-0077": "One-click checkout (CardOnFile)",
+        "ID-0082": "Fast go-live, token migration, fewer declines, reporting per franchisee",
+        "ID-0098": "OMS | CRM",
+        "ID-0137": "slicestreet.example website, iOS app, Android app; two API credentials: one for web, one for apps",
+        "ID-0005": "iOS | Android | Web",
+        "ID-0036": "No plugin; custom checkout on own stack",
+        "ID-0138": "TRUE"
+      },
+      "gold": {
+        "ID-0003": {"agrees": true},
+        "ID-0001": {"agrees": true},
+        "ID-0005": {"agrees": true},
+        "ID-0002": {"conflict": true},
+        "ID-0050": {"equals": "Immediate capture"},
+        "ID-0057": {"equals": "TRUE"},
+        "ID-0046": {"equals": "TRUE"},
+        "ID-0096": {"equals": "Automated ingestion"},
+        "ID-0097": {"equals": "SFTP"},
+        "ID-0086": {"equals": "Separate bank accounts"},
+        "ID-0099": {"equals": "Custom UI"},
+        "ID-0079": {"contains_any": ["email", "support team"]},
+        "ID-0061": {"empty": true},
+        "ID-0019": {"empty": true},
+        "ID-0018": {"empty": true},
+        "ID-0132": {"empty": true}
+      },
+      "forbidden_words": ["France", "EUR", "Cartes Bancaires", "Edenred", "POS vendor"],
+      "no_bank_additions_from": ["ID-0063", "ID-0065", "ID-0067", "ID-0071", "ID-0073", "ID-0006", "ID-0139"]
+    }
+  ]
+}

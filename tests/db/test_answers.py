@@ -178,6 +178,24 @@ def test_material_dates_go_into_the_source_and_confirm_the_ims_own_answers(sessi
     assert out["summary"]["scope_log"] == {"tab_added": False, "rows": 0, "note": "no Scope log: the sheet's tabs weren't passed"}
 
 
+def test_the_model_is_shown_the_current_answers_and_same_counts_as_agreement(session):
+    tab, _ = scope_sheet(session)
+    run_answers(session, tab)  # ID-0001 and ID-0003 now carry suggested answers
+    model = FakeModel({"answers": [{"id": "ID-0001", "answer": "same", "source": "Call 2"},
+                                   {"id": "ID-0003", "answer": "no", "source": "Call 2"}]})
+    out = start_answers(session, SETTINGS, model, start_request(
+        tab, material=[{"label": "Call 2", "kind": "notes", "date": "2026-10-30", "text": "second call"}]))
+    prompt = model.calls[0][1]["content"]
+    assert "ID-0001 | free_text | Project Background | current answer: Moving off their current processor" in prompt
+    assert "ID-0004 | toggle | Primary driver for Capital?" in prompt and "ID-0004 | toggle | Primary driver for Capital? | current" not in prompt
+    s = out["summary"]
+    assert s["agreed_ids"] == ["ID-0001"] and s["agreed_with_yours"] == 1 and s["confirmed_yours"] == 0
+    assert [c["id"] for c in s["conflicts"]] == ["ID-0003"]
+    tab.apply(out["requests"])
+    source = tab.rows[0].index("source")
+    assert next(r for r in tab.rows if r[0] == "ID-0001")[source] == "Call summary, Oct 24; Call 2, 2026-10-30"
+
+
 def test_the_scope_log_tab_is_added_then_appended_to(session):
     tab, _ = scope_sheet(session)
     book = FakeBook({7: tab}, {7: "Project Scope"})

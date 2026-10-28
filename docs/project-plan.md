@@ -225,6 +225,14 @@ After the fixes (same case, same model): US 17/18 gold checks, FR 19/20, no leak
 additions, no spurious new questions. The two misses left are prose remarks the model didn't tie to
 their bank questions (token migration ID-0057 on US, loyalty ID-0072 on FR).
 
+Second case, `slice-street-follow-up` (2026-10-27): a later call on the US tab with the tab's current
+answers, scoring `agrees` and `conflict` as well as fills. Baseline, before the model saw the current
+answers: 13/16 gold checks; the material restating "USD" as "USD only" and "United States" as "US only"
+came back as two false conflicts, and one prose remark (expired cards, ID-0079) was missed. Fix: the
+extraction prompt shows each answered question's current answer and the model answers `same` when the
+material agrees; the server then uses the sheet's own wording, so the merge sees an agreement. After:
+to be measured on the rebuilt server.
+
 ## Backlog
 
 - **Extraction misses.** Measured by the eval above; earlier seen as ID-0098 answered "Other" instead of

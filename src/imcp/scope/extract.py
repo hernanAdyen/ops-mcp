@@ -53,6 +53,9 @@ Answer from the material only:
   questions from another track's section.
 - Before writing a new question, check both lists: if a listed question covers the topic, even in other words
   (for example 'Offline Processing' covers a remark about taking payments offline), answer that question instead.
+- Some sheet questions already have a current answer, shown on their line. If the material agrees with it (the
+  same meaning, whatever the wording), answer with the single word same. If the material says something different,
+  or more, give the new answer in full. If the material doesn't mention it, leave the question out.
 - Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
   options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
   your own words, at most 25 words.
@@ -98,14 +101,20 @@ class Extraction:
                 "new_questions": len(self.new_questions), "dropped": self.dropped, "note": self.note}
 
 
-def question_lines(questions: list[Question]) -> str:
-    """One line per question: id | type | question | options | purpose (when the bank has one)."""
+def question_lines(questions: list[Question], current: dict[str, str] | None = None) -> str:
+    """One line per question: id | type | question | options | purpose (when the bank has one) | current answer
+    (when the sheet already has one)."""
     lines = []
     for q in questions:
         options = f" | options: {'; '.join(q.options)}" if q.options else ""
         purpose = f" | purpose: {one_line(q.purpose, 300)}" if q.purpose else ""
-        lines.append(f"{q.question_id} | {E.QuestionType(q.type).value} | {one_line(q.text, 400)}{options}{purpose}")
+        answered = f" | current answer: {one_line(current[q.question_id], MAX_ANSWER)}" \
+            if current and current.get(q.question_id) else ""
+        lines.append(f"{q.question_id} | {E.QuestionType(q.type).value} | {one_line(q.text, 400)}{options}{purpose}{answered}")
     return "\n".join(lines)
+
+
+SAME = "same"
 
 
 def _match_option(value: str, options: list[str]) -> str | None:
@@ -210,13 +219,17 @@ def _source(value, labels: dict[str, str], fallback: str) -> str:
 
 def extract_answers(model: ChatModel | None, materials: list[Material], sheet_questions: list[Question],
                     other_questions: list[Question], existing_new: list[str], merchant_name: str | None = None,
-                    sanitize: bool = True, track: str | None = None) -> Extraction:
+                    sanitize: bool = True, track: str | None = None, current: dict[str, str] | None = None) -> Extraction:
     """
     sheet_questions  the bank questions in the IM's sheet: the ones to answer
     other_questions  the rest of the active bank: answered only when the material answers them directly
     existing_new     the wording of new questions already in the sheet, so they aren't suggested again
     track            the tab's title (the project track this run fills), so material grouped by track is read right
+    current          the sheet's current answer by question ID, for the questions already answered: the model
+                     sees them and answers `same` when the material agrees, so a different wording of the same
+                     fact isn't a conflict
     """
+    current = {k: v for k, v in (current or {}).items() if v and str(v).strip()}
     if model is None:
         return Extraction(status="unavailable", note="Our model isn't configured (MODEL_BASE_URL, MODEL_NAME).")
     material_text = "\n\n".join(f'### {m.label} ({m.kind})\n"""\n{m.text.strip()}\n"""' for m in materials)
@@ -225,8 +238,9 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
                   if track else "")
     user = (
         track_line
-        + "Questions in the IM's sheet (id | type | question | options | purpose: what the answer is for):\n"
-        f"{question_lines(sheet_questions) or '(none)'}\n\n"
+        + "Questions in the IM's sheet (id | type | question | options | purpose: what the answer is for | current answer, "
+        "when the sheet already has one):\n"
+        f"{question_lines(sheet_questions, current) or '(none)'}\n\n"
         "Other bank questions. Answer these only if the material answers them directly "
         f"(id | type | question | options | purpose):\n{question_lines(other_questions) or '(none)'}\n\n"
         "New questions already in the sheet (don't list these again):\n"
@@ -282,10 +296,17 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
         if qid in seen:
             dropped["repeated_id"] += 1
             continue
-        value, problem = normalize_answer(q, item.get("answer"))
-        if value is None:
-            dropped["not_an_answer"] += 1
-            continue
+        raw = item.get("answer")
+        if isinstance(raw, str) and raw.strip().casefold() == SAME:
+            if qid not in current:  # nothing to agree with
+                dropped["not_an_answer"] += 1
+                continue
+            value, problem = current[qid], None  # the sheet's wording, so the merge sees an agreement
+        else:
+            value, problem = normalize_answer(q, raw)
+            if value is None:
+                dropped["not_an_answer"] += 1
+                continue
         add_answer(q, value, item.get("source"), item.get("evidence"), item.get("confidence"), problem)
 
     known_texts = [q.text for q in sheet_questions] + [q.text for q in other_questions] + list(existing_new)

@@ -138,6 +138,22 @@ def test_question_lines():
     assert question_lines([SHEET[1]]) == "ID-0037 | toggle | Tipping"
 
 
+def test_the_model_sees_current_answers_and_same_means_the_sheets_wording():
+    current = {"ID-0001": "USD", "ID-0037": "FALSE"}
+    reply = {"answers": [{"id": "ID-0001", "answer": "same", "source": "Call 2", "evidence": "confirmed again"},
+                         {"id": "ID-0037", "answer": "TRUE", "source": "Call 2", "evidence": "they want tipping now"},
+                         {"id": "ID-0050", "answer": "Same", "source": "Call 2"}]}  # nothing to agree with
+    result, model = run(reply, current=current)
+    prompt = model.calls[0][1]["content"]
+    assert "ID-0001 | free_text | What regions are in scope? | current answer: USD" in prompt
+    assert "ID-0050 | multi_choice" in prompt and "ID-0050 | multi_choice | What is your capture strategy? | options" in prompt
+    assert "current answer, when the sheet already has one" in prompt
+    by_id = {a["id"]: a for a in result.answers}
+    assert by_id["ID-0001"]["answer"] == "USD" and by_id["ID-0001"]["evidence"] == "confirmed again"
+    assert by_id["ID-0037"]["answer"] == "TRUE"  # a different finding comes back as it is: the merge marks the conflict
+    assert "ID-0050" not in by_id and result.dropped["not_an_answer"] == 1
+
+
 def test_question_lines_carry_the_purpose_when_the_bank_has_one():
     tipping = q("ID-0037", "Tipping", "toggle", purpose="Decides whether  the terminals\nneed a tipping flow.")
     assert question_lines([tipping]) == "ID-0037 | toggle | Tipping | purpose: Decides whether the terminals need a tipping flow."

@@ -19,7 +19,10 @@ case is made up. A case has:
 
 - `tabs`: one per track tab, with the question IDs in the tab (in sheet order) and `gold`, the expected
   answers by ID: `equals`, `contains`, `contains_any`, `not_contains` or `empty` (for questions the
-  material leaves unanswered or undecided).
+  material leaves unanswered or undecided). A tab can carry `current`, the answers already in the sheet
+  as after an earlier call; for those questions the gold rule is `agrees` (the material confirms the
+  answer, in any wording) or `conflict` (the material says something else).
+- `material` names the file, its label and kind, and its `date` when the case is a later call.
 - `forbidden_words` per tab: words from the other track that must not appear in this tab's answers.
 - `no_bank_additions_from` per tab: bank questions that belong to another track and must not be
   suggested as additions here.
@@ -29,3 +32,4 @@ case is made up. A case has:
 | Case | What it tests |
 |---|---|
 | `slice-street-pizza` | A two-track Gong summary (US online, FR in-store). Answers by ID per track, "not discussed" lines, undecided remarks, and prose notes that answer bank questions (offline processing, loyalty, token migration). |
+| `slice-street-follow-up` | A second call on the US tab after the first one, with the tab's current answers. Restated answers must count as agreement, not conflict (currencies, regions, platforms); a real change must be a conflict (Venmo added); new answers by ID; two prose remarks that answer bank questions (custom UI, expired cards). |
