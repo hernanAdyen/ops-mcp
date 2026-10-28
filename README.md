@@ -12,6 +12,33 @@ bank, fill it from call notes, and write the solution proposal.
 How it's built: [docs/architecture.md](docs/architecture.md). Status and next steps:
 [docs/project-plan.md](docs/project-plan.md).
 
+## Why it matters
+
+- **Time.** Today a scope sheet is assembled by hand from the question bank, answers are copied out of
+  call notes one by one, and a solution proposal is written from a blank copy of the template. With the
+  three commands, the scope sheet takes a minute, a call's answers land in the sheet in the time it
+  takes to read them, and a proposal's first draft, with the merchant's answers, a researched solution
+  per track, a diagram and real documentation links, is ready to review in a quarter of an hour. The IM's
+  time goes into judgement and the conversation with the merchant, not into copying.
+- **One standard.** Every proposal starts from the same master, every answer is tied to a question in
+  the bank by its permanent ID, every documentation link is a real page the knowledge graph knows, and
+  every run is recorded. Two IMs scoping two merchants produce documents that read the same way, and a
+  reviewer knows where each statement came from.
+- **The scope builds up over the project.** Each call's findings carry their date and source, an
+  answer the material confirms is marked confirmed, a later call that says something different marks a
+  conflict for the IM to settle, and the Scope log keeps the history. Nothing is overwritten and nothing
+  is lost between meetings.
+- **IM knowledge becomes an asset.** The question bank carries what each question is for and which
+  ones every project needs; the knowledge graph holds the documentation, the approved diagrams and, next,
+  the team's past proposals, so a new IM's proposal draws on the designs the experienced ones used. That
+  same graph is the base for what comes after: recommending a design from a scope, spotting what a
+  scope is missing, seeing which questions decide the effort, onboarding new IMs faster.
+- **Private by design.** Merchant material goes to the team's own model for one run and is never
+  stored; what comes back is scrubbed of contact details and keys; the files stay in the IM's own Drive;
+  every run's record keeps IDs and counts, never the material.
+- **Measurable.** The extraction is scored against fictional cases with known right answers, so a
+  change to a prompt or a model shows up as a number, not an opinion.
+
 ## What you need
 
 - **Docker** (Docker Desktop or similar), or a local Postgres with pgvector (see "Without Docker")
