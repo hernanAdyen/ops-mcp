@@ -46,10 +46,8 @@ Answer from the material only:
 - The material may list answers by question ID (for example from a call-notes tool given our questions). Use those
   IDs, and treat 'not discussed' as no answer. Answer every listed ID that has an answer, in every section of the
   sheet (Discovery and Features & Functionality alike).
-- Remarks outside the ID list answer questions too. Read every paragraph of the material and match each remark
-  to the sheet question it answers (a remark on how expired cards are handled answers the question about expired
-  cards; a remark on the checkout being a custom UI answers the question about the checkout stack). An answer
-  found in prose counts as much as one given by ID.
+- Remarks outside the ID list answer questions too: read every paragraph of the material, and when a remark
+  answers a sheet question, answer that question like any other, in its format.
 - The sheet tab you are filling is for one project track (named in the request). Material may be grouped by track
   (headings like 'Track: US'). Take answers for this tab from its own track's section and from notes that are not
   about a particular track. Ignore the sections of other tracks entirely: never put another track's facts in an
@@ -61,9 +59,11 @@ Answer from the material only:
   it, or repeats part of it without adding or changing anything (the same meaning, whatever the wording), answer
   with the single word same. Only when the material says something different, or adds something, give the new
   answer in full. If the material doesn't mention it, leave the question out.
-- Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
-  options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
-  your own words, at most 25 words.
+- Use the question's format, whether the answer was given by ID or in prose. toggle: TRUE or FALSE (TRUE means yes,
+  or in scope). single_choice: exactly one of its options. multi_choice: one or more of its options, joined with
+  " | ". Pick the listed option that means the same as the remark ("card on file" is the CardOnFile option, an
+  "order management system" is OMS); use Other only when no option fits, and never list an option the material
+  rules out. number: a number. free_text: a short answer in your own words, at most 25 words.
 - For each answer give the label of the material it came from, a short evidence note (at most 20 words, in your own
   words: no quotes, no people's names, no email addresses or phone numbers) and a confidence: high if the material
   says it directly, medium if it clearly implies it, low if you inferred it.
