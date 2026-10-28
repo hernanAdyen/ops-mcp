@@ -115,9 +115,9 @@ prose, outside any list of IDs.
 - Read every paragraph. When a remark clearly answers one of the listed questions, answer that question.
 - Answer only questions from the list, and only from the material. Never guess. Leave out anything undecided,
   'to be confirmed', 'not discussed' or 'not applicable', and every question the material doesn't answer.
-- A toggle is TRUE when the material says the thing is wanted or in scope, and FALSE only when the material says it
-  is not wanted or out of scope. A thing the material never mentions is not FALSE: it is no answer. Most of the
-  listed questions will have no answer; an empty list is a normal result.
+- A toggle gets TRUE only, and only when the material says the thing is wanted or in scope. Never answer FALSE
+  here: a thing the material doesn't mention, rules out for another track, or leaves undecided is no answer.
+  Most of the listed questions will have no answer; an empty list is a normal result.
 - Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
   options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
   your own words, at most 25 words.
@@ -425,7 +425,7 @@ def _prose_pass(model, materials: list[Material], unanswered: list[Question], ma
         return {"status": "unavailable", "answers": 0, "note": f"The second reading didn't run: {exc}"}
     allowed = {q.question_id: q for q in unanswered}
     counts = {"status": "ok", "answers": 0,
-              "dropped": {"unknown_id": 0, "not_an_answer": 0, "toggle_without_evidence": 0, "limit": 0}}
+              "dropped": {"unknown_id": 0, "not_an_answer": 0, "toggle_not_from_prose": 0, "limit": 0}}
     taken: set[str] = set()
     for item in _as_list(data.get("answers")):
         if not isinstance(item, dict):
@@ -439,12 +439,12 @@ def _prose_pass(model, materials: list[Material], unanswered: list[Question], ma
         if value is None:
             counts["dropped"]["not_an_answer"] += 1
             continue
-        # A toggle from prose needs the model to point at the remark, and to be sure: a FALSE with weak or no
-        # evidence is the model reading silence as "no", which the first pass never does.
+        # A toggle from prose is only ever TRUE, with the remark as evidence: a FALSE here is the model reading
+        # silence, "not discussed" or "not for this track" as "no", which the first pass never does.
         confidence = one_line(item.get("confidence"), 10).casefold()
         if E.QuestionType(q.type) is E.QuestionType.toggle and (
-                not one_line(item.get("evidence"), MAX_EVIDENCE) or confidence == "low"):
-            counts["dropped"]["toggle_without_evidence"] += 1
+                value == "FALSE" or not one_line(item.get("evidence"), MAX_EVIDENCE) or confidence == "low"):
+            counts["dropped"]["toggle_not_from_prose"] += 1
             continue
         if counts["answers"] >= MAX_PROSE:
             counts["dropped"]["limit"] += 1
