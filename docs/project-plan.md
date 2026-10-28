@@ -243,8 +243,10 @@ follow-up lost the prose hits again. The lesson: with this model, a rule aimed a
 trades against option formatting, so the prompt keeps only the `same` rule, and the prose misses need
 a targeted step rather than another prompt line: after the ID-based extraction, a second call that
 takes the sheet's unanswered questions and the material's prose paragraphs only and asks which of
-those questions the prose answers. Proposed, not built. The FR tab's offline-processing remark
-(ID-0070) is a third instance of the same miss.
+those questions the prose answers. Built the same day (`_prose_pass` in `extract.py`, skipped when the
+material has fewer than two lines that aren't ID answers; a failure keeps the first pass; counts in the
+trace under `prose_pass`). The FR tab's offline-processing remark (ID-0070) is a third instance of the
+same miss. Numbers after the rebuild: below.
 
 ## Backlog
 

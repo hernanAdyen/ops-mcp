@@ -131,7 +131,46 @@ def test_the_summary_keeps_counts_only():
     reply = {"answers": [{"id": "ID-0001", "answer": "US only"}], "new_questions": [{"question": "Brand new topic?"}]}
     result, _ = run(reply)
     assert result.summary() == {"status": "ok", "model": "fake-model", "answers": 1, "new_questions": 1,
-                                "dropped": {}, "note": None}
+                                "dropped": {}, "note": None, "prose_pass": {"status": "skipped", "answers": 0}}
+
+
+PROSE = [Material("Call notes", "notes", "ID-0001: US only.\n\nThe ops lead said the vans use a cellular connection for "
+                  "the terminals, nothing else.\nThey download the settlement report by hand every morning and want that "
+                  "to keep working for now.\nSomeone asked about tipping; not decided.")]
+
+
+def test_second_pass_answers_unanswered_questions_from_prose():
+    first = {"answers": [{"id": "ID-0001", "answer": "US only", "source": "Call notes"}]}
+    second = {"answers": [{"id": "ID-0069", "answer": "cellular", "source": "Call notes", "evidence": "vans use cellular"},
+                          {"id": "ID-0096", "answer": "Manual download", "source": "Call notes"},  # not in the sheet
+                          {"id": "ID-0001", "answer": "United States", "source": "Call notes"},  # already answered
+                          {"id": "ID-0037", "answer": "not decided", "source": "Call notes"}]}  # no answer
+    result, model = run([first, second], materials=PROSE)
+    assert len(model.calls) == 2
+    prompt = model.calls[1][1]["content"]
+    assert "ID-0069 | single_choice" in prompt and "ID-0001 |" not in prompt and "cellular connection" in prompt
+    assert model.calls[1][0]["content"].startswith("You help an Adyen implementation manager")
+    by_id = {a["id"]: a for a in result.answers}
+    assert by_id["ID-0069"]["answer"] == "Cellular" and by_id["ID-0069"]["evidence"] == "vans use cellular"
+    assert by_id["ID-0001"]["answer"] == "US only" and "ID-0096" not in by_id
+    assert result.prose_pass == {"status": "ok", "answers": 1, "dropped": {"unknown_id": 2, "not_an_answer": 1}}
+    assert result.summary()["prose_pass"]["answers"] == 1
+
+
+def test_second_pass_is_skipped_on_id_only_material_and_when_nothing_is_left():
+    result, model = run({"answers": [{"id": "ID-0001", "answer": "US only", "source": "Call summary, Oct 24"}]})
+    assert len(model.calls) == 1 and result.prose_pass == {"status": "skipped", "answers": 0}
+    everything = {"answers": [{"id": q.question_id, "answer": "x" if q.type.value == "free_text" else "TRUE", "source": "Call notes"}
+                              for q in SHEET]}
+    result, model = run(everything, materials=PROSE, sheet_questions=SHEET[:2])
+    assert len(model.calls) == 1 and result.prose_pass["status"] == "skipped"
+
+
+def test_a_failed_second_pass_keeps_the_first():
+    first = {"answers": [{"id": "ID-0001", "answer": "US only", "source": "Call notes"}]}
+    result, model = run([first, ModelError("could not reach the model")], materials=PROSE)
+    assert result.status == "ok" and [a["id"] for a in result.answers] == ["ID-0001"]
+    assert result.prose_pass["status"] == "unavailable" and "second reading" in result.prose_pass["note"]
 
 
 def test_question_lines():

@@ -6,20 +6,24 @@ import re
 
 
 class FakeModel:
-    """Returns a fixed reply and remembers what it was asked."""
+    """Returns a fixed reply and remembers what it was asked. A list of replies is given out one per
+    call, the last one again after that."""
 
     model = "fake-model"
 
-    def __init__(self, reply: dict | str | Exception):
+    def __init__(self, reply: dict | str | Exception | list):
         self.reply = reply
         self.calls: list[list[dict]] = []
 
     def chat(self, messages, *, max_tokens=1500, temperature=0.0, timeout=None) -> str:
         self.calls.append(messages)
         self.timeouts = getattr(self, "timeouts", []) + [timeout]
-        if isinstance(self.reply, Exception):
-            raise self.reply
-        return self.reply if isinstance(self.reply, str) else json.dumps(self.reply)
+        reply = self.reply
+        if isinstance(reply, list):
+            reply = reply[min(len(self.calls), len(reply)) - 1]
+        if isinstance(reply, Exception):
+            raise reply
+        return reply if isinstance(reply, str) else json.dumps(reply)
 
     def ping(self) -> dict:
         return {"ok": True, "model": self.model, "latency_ms": 1}

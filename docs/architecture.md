@@ -64,7 +64,9 @@ These are deliberate. Changing one is a design decision to discuss first, not a 
 4. **Our model does the heavy reading, on the server, and is never trusted blindly.** Topic matching
    and answer extraction run on our model so Claude doesn't have to hold the whole bank. Everything it
    returns is checked: unknown IDs are dropped, answers are put in the question's format, new questions
-   that repeat a bank question are dropped.
+   that repeat a bank question are dropped. The extraction reads twice: once for everything, then a
+   narrow second call with only the sheet's still-unanswered questions and the material's prose, which
+   can add answers for those questions and nothing else (skipped when the material is all ID lines).
 5. **Privacy by default.** Merchant material and the answers found are never stored or logged. What our
    model found is scrubbed of email addresses, phone numbers, IBANs, card numbers and keys (`imcp.pii`,
    behind `FLAG_SANITIZE`) before it goes back to the chat and the sheet, and so is every page's title
@@ -147,7 +149,8 @@ block of sections per track.
 2. `im_answers_start` (a job: `im_answers_wait` until it's done), with the tab's title: the server
    first drops any piece already used on that tab (same text, by its hash in a recorded run) and
    refuses when nothing is left; our model answers that tab's questions and lists new ones; the server
-   checks them and returns one batch that fills empty answers (`source` = label and date), confirms
+   checks them (a second, narrow call reads the prose for the questions still unanswered) and returns
+   one batch that fills empty answers (`source` = label and date), confirms
    the IM's answers the material agrees with, marks a different finding `conflict` with the finding in
    `ai_note`, adds the review columns and Suggested additions to that tab, and appends one line per
    change to the sheet's Scope log tab (added on the first run). The scope is built over several

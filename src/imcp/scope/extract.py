@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field
 from imcp.db import enums as E
 from imcp.db.models import Question
 from imcp.llm import ModelError, parse_json_object
+from imcp.bank.parse import ID_PATTERN
 from imcp.scope.text import one_line, same_question, scrub_contacts, scrub_name
 from imcp.scope.topics import ChatModel
 
@@ -24,6 +25,8 @@ MAX_QUESTION = 300
 MAX_REASON = 160
 MAX_NEW = 8
 MAX_OTHER_BANK = 15
+MAX_PROSE = 15  # answers the second pass may add
+MIN_PROSE_LINES = 2  # lines that aren't ID answers before the second pass is worth a call
 MODEL_TIMEOUT = 240  # seconds: long material takes the model a while
 SAME_QUESTION = 0.85  # similarity at which a "new" question is really one we already have
 CONFIDENCE = ("high", "medium", "low")
@@ -95,11 +98,45 @@ class Extraction:
     new_questions: list[dict] = field(default_factory=list)
     dropped: dict = field(default_factory=dict)  # counts of what was thrown away, by reason
     note: str | None = None
+    prose_pass: dict = field(default_factory=dict)  # the second pass: status, answers, dropped (counts only)
 
     def summary(self) -> dict:
         """What to keep in the run's trace: counts only, no answers or material."""
         return {"status": self.status, "model": self.model, "answers": len(self.answers),
-                "new_questions": len(self.new_questions), "dropped": self.dropped, "note": self.note}
+                "new_questions": len(self.new_questions), "dropped": self.dropped, "note": self.note,
+                "prose_pass": self.prose_pass}
+
+
+PROSE_PROMPT = """You help an Adyen implementation manager (IM) fill in the scoping question sheet for a merchant project.
+A first reading of the material answered the questions it lists by ID. You get the questions that are still
+unanswered, and the same material. Your one job: find the questions the material answers in passing, in its
+prose, outside any list of IDs.
+
+- Read every paragraph. When a remark clearly answers one of the listed questions, answer that question.
+- Answer only questions from the list, and only from the material. Never guess. Leave out anything undecided,
+  'to be confirmed', 'not discussed' or 'not applicable', and every question the material doesn't answer.
+- Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
+  options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
+  your own words, at most 25 words.
+- For each answer give the label of the material it came from, a short evidence note (at most 20 words, in your own
+  words: no quotes, no people's names, no email addresses or phone numbers) and a confidence: high if the material
+  says it directly, medium if it clearly implies it, low if you inferred it.
+
+Answer with one JSON object and nothing else:
+{"answers": [{"id": "ID-0000", "answer": "...", "source": "label of the material", "evidence": "...", "confidence": "high"}]}
+
+Use question IDs exactly as listed. If nothing fits, return an empty list."""
+
+
+def has_prose(materials: list[Material]) -> bool:
+    """Whether the material has remarks outside ID answers: the second pass is only worth a call then."""
+    lines = 0
+    for m in materials:
+        for line in m.text.splitlines():
+            text = line.strip()
+            if len(text) >= 40 and not ID_PATTERN.match(text):
+                lines += 1
+    return lines >= MIN_PROSE_LINES
 
 
 def question_lines(questions: list[Question], current: dict[str, str] | None = None) -> str:
@@ -361,8 +398,51 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
             "closest_id": closest if closest in in_sheet or closest in others else None,
             "reason": clean(scrub_name(one_line(item.get("reason"), MAX_REASON), merchant_name)),
         })
+    # Second pass: the sheet questions still unanswered, against the material's prose. Narrow on purpose:
+    # it can only add answers for those questions, so the first pass's answers and formats are untouched.
+    unanswered = [q for q in sheet_questions if q.question_id not in seen]
+    if unanswered and has_prose(materials):
+        result.prose_pass = _prose_pass(model, materials, unanswered, material_text, track_line, add_answer)
+    else:
+        result.prose_pass = {"status": "skipped", "answers": 0}
     result.dropped = {k: v for k, v in dropped.items() if v}
     return result
+
+
+def _prose_pass(model, materials: list[Material], unanswered: list[Question], material_text: str, track_line: str,
+                add_answer) -> dict:
+    """One focused call; returns counts for the trace. A failure leaves the first pass's answers as they are."""
+    user = (track_line + "Unanswered questions in the IM's sheet (id | type | question | options | purpose):\n"
+            f"{question_lines(unanswered)}\n\nMaterial:\n{material_text}")
+    try:
+        reply = model.chat([{"role": "system", "content": PROSE_PROMPT}, {"role": "user", "content": user}],
+                           max_tokens=3000, timeout=MODEL_TIMEOUT)
+        data = parse_json_object(reply)
+    except ModelError as exc:
+        return {"status": "unavailable", "answers": 0, "note": f"The second reading didn't run: {exc}"}
+    allowed = {q.question_id: q for q in unanswered}
+    counts = {"status": "ok", "answers": 0, "dropped": {"unknown_id": 0, "not_an_answer": 0, "limit": 0}}
+    taken: set[str] = set()
+    for item in _as_list(data.get("answers")):
+        if not isinstance(item, dict):
+            continue
+        qid = one_line(item.get("id"), 20)
+        q = allowed.get(qid)
+        if q is None or qid in taken:
+            counts["dropped"]["unknown_id"] += 1
+            continue
+        value, problem = normalize_answer(q, item.get("answer"))
+        if value is None:
+            counts["dropped"]["not_an_answer"] += 1
+            continue
+        if counts["answers"] >= MAX_PROSE:
+            counts["dropped"]["limit"] += 1
+            continue
+        taken.add(qid)
+        add_answer(q, value, item.get("source"), item.get("evidence"), item.get("confidence"), problem)
+        counts["answers"] += 1
+    counts["dropped"] = {k: v for k, v in counts["dropped"].items() if v}
+    return counts
 
 
 def _answer_for_covering(q: Question, item: dict) -> str | None:
