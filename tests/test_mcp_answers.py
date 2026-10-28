@@ -49,15 +49,17 @@ async def test_pasted_material_and_saved_files_are_sent_together(tmp_path):
     (tmp_path / "call-1.txt").write_text("Transcript: we need tokens migrated.", encoding="utf-8")
     received = []
     text = _tool_text(await server_for(received, tmp_path).call_tool("im_answers_start", {
-        **SHEET, "material": [{"label": "Call summary", "kind": "summary", "text": "US only."}],
+        **SHEET, "material": [{"label": "Call summary", "kind": "summary", "date": "2026-10-24", "text": "US only."}],
         "files": [{"label": "Call 1 transcript", "file": "call-1.txt"}],
-        "new_rows": [{"id": "NEW-0001", "question": "Two payers?"}]}))
+        "new_rows": [{"id": "NEW-0001", "question": "Two payers?"}],
+        "sheet_tabs": [{"sheet_id": 0, "title": "Project Scope"}, {"sheet_id": 1001, "title": "Scope log"}]}))
     [(kind, body, wait)] = received
     assert wait == 40
     assert body["material"] == [
-        {"label": "Call summary", "kind": "summary", "text": "US only."},
-        {"label": "Call 1 transcript", "kind": "transcript", "text": "Transcript: we need tokens migrated."}]
+        {"label": "Call summary", "kind": "summary", "date": "2026-10-24", "text": "US only."},
+        {"label": "Call 1 transcript", "kind": "transcript", "date": None, "text": "Transcript: we need tokens migrated."}]
     assert body["new_rows"] == [{"id": "NEW-0001", "question": "Two payers?"}] and body["basic_filter"] is None
+    assert body["sheet_tabs"] == [{"sheet_id": 0, "title": "Project Scope"}, {"sheet_id": 1001, "title": "Scope log"}]
     assert json.loads(text)["draft_id"] == RUN and " " not in text  # compact
 
 

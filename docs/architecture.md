@@ -75,8 +75,9 @@ These are deliberate. Changing one is a design decision to discuss first, not a 
    deactivated and keeps its history. Columns our model drafts (`purpose`, `baseline`) go to a CSV for
    the owner to review and paste in; nothing writes to the master.
 7. **The IM owns their sheet.** We only add: fill empty answers, add review columns, add rows at the
-   end. We never overwrite the IM's answers; a different finding goes in a note. The IM reviews in the
-   sheet, and the next run reads what they changed.
+   end, append to the Scope log. We never overwrite the IM's answers; a different finding goes in a
+   note and marks the row `conflict`, a finding that agrees marks their answer `confirmed`. The IM
+   reviews in the sheet, and the next run reads what they changed.
 8. **Slow work is a job.** Calls through a remote bridge can be cut off at 60 seconds. Anything slow
    runs as a job on the app server; each call waits up to 40 seconds and returns a job ID to ask again.
 9. **Every run is recorded.** Each command run is a `generation` row with a trace (what was asked and
@@ -135,11 +136,16 @@ block of sections per track.
 ### /ops-answer-scope
 
 1. The skill gets the scope sheet, which track tabs the material covers (asked only when there are
-   several) and the merchant material. Then, tab by tab, it reads the tab's ID, answer and review columns.
-2. `im_answers_start` (a job: `im_answers_wait` until it's done), with the tab's title: our model
-   answers that tab's questions and lists new ones; the server checks them and returns one batch that
-   fills empty answers, adds `source`, `confidence`, `status` and `ai_note` columns, and adds Suggested
-   additions to that tab.
+   several) and the merchant material, each piece with a label, a kind and its date. Then, tab by tab,
+   it reads the tab's ID, answer and review columns.
+2. `im_answers_start` (a job: `im_answers_wait` until it's done), with the tab's title: the server
+   first drops any piece already used on that tab (same text, by its hash in a recorded run) and
+   refuses when nothing is left; our model answers that tab's questions and lists new ones; the server
+   checks them and returns one batch that fills empty answers (`source` = label and date), confirms
+   the IM's answers the material agrees with, marks a different finding `conflict` with the finding in
+   `ai_note`, adds the review columns and Suggested additions to that tab, and appends one line per
+   change to the sheet's Scope log tab (added on the first run). The scope is built over several
+   meetings this way; the IM resolves a conflict in the sheet.
 3. The skill sends the batch, reads column A back, asks consent, and calls `im_answers_record`.
 
 ### /ops-create-solution
@@ -206,7 +212,7 @@ on. With one track the headings read "Project".
 | `src/imcp/scope/sheet_plan.py` | The `/ops-create-scope` Sheets batch: a tab per track, deletions, order, sections, groups, filter |
 | `src/imcp/scope/extract.py` | Answer extraction with our model, and checking what it returns |
 | `src/imcp/scope/answers.py` | `/ops-answer-scope` start and record |
-| `src/imcp/scope/answers_plan.py` | The `/ops-answer-scope` Sheets batch |
+| `src/imcp/scope/answers_plan.py` | The `/ops-answer-scope` Sheets batch: the merge rules over meetings (`suggested`, `confirmed`, `conflict`) and the Scope log tab (`appendCells`, so no row arithmetic) |
 | `src/imcp/scope/additions.py` | The Suggested additions section, shared by both commands |
 | `src/imcp/scope/queue.py` | The review queue for new questions, and reading back what the IM did |
 | `src/imcp/scope/call_prompt.py` | The call-notes prompt |

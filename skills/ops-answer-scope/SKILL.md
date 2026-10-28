@@ -9,6 +9,10 @@ Find the answers to the scope sheet's questions in whatever the IM has from the 
 into the sheet, and suggest questions the scope doesn't have yet. The IM reviews everything in the
 sheet itself.
 
+The scope is built over several meetings: run this after each call, with that call's material. Each
+answer carries its source and date, a later call that agrees confirms the IM's answer, one that
+disagrees marks the row `conflict`, and every change is logged in the sheet's **Scope log** tab.
+
 A scope sheet has one tab per project track, named after the track (a scope with one track has the tab
 Project Scope). A run fills one tab; with several tabs, run it once per tab with the same material.
 
@@ -25,13 +29,19 @@ server, tell the IM to check that `docker compose up` is running, and stop.
   track tabs are the ones whose row 1 starts with `id` (read `'<title>'!A1` where it isn't obvious).
   With one track tab, use it without asking. With several, name them and ask the IM in one short
   message which ones the material covers; "all" is a fine answer. Note each tab's title, `sheetId`,
-  `gridProperties.columnCount`, `gridProperties.rowCount` and its `basicFilter`, if it has one.
+  `gridProperties.columnCount`, `gridProperties.rowCount` and its `basicFilter`, if it has one. Also
+  note every tab's `sheetId` and title, in tab order (`sheet_tabs`): the server uses them to find or
+  add the Scope log tab.
 - **The material.** Ask the IM to share whatever they have from the merchant: paste notes, a call summary,
   a transcript or an email, attach a file, or give a Google Doc link. Don't ask for a particular source or
   system. The output of the call-notes prompt from `/ops-create-scope` works best, because it answers by ID.
-  - Give each piece a short label the IM will recognise, e.g. "Call summary, Oct 24" or "Email from
+  - Give each piece a short label the IM will recognise, e.g. "Call summary" or "Email from
     finance". Use what the IM calls it; ask only if it's unclear. No people's names in labels.
   - Give each piece its kind: `transcript`, `summary`, `notes`, `email` or `document`.
+  - Give each piece its date (`date`, YYYY-MM-DD): the day of the call, email or document. Take it
+    from the material or from what the IM said; if neither says, ask in the same short message as
+    the rest ("Which day was the call?"). The date goes into the sheet's `source` column, so the IM
+    can see which meeting each answer came from. Leave it out only if the IM doesn't know.
   - A Google Doc: read it with the Drive connector and pass its text. An attachment: read its text and
     pass that.
   - Long material (more than about 20,000 characters, such as a full call transcript): suggest the IM
@@ -58,14 +68,17 @@ Then do steps 2 to 4 for each chosen tab, one tab at a time, with the same mater
 Call **`im_answers_start`** with: the file ID (`sheet_id`); the tab's title (`tab_title`), `sheetId`,
 column count and row count; the header row; column A; `columns` (each column you read, by its header
 name, e.g. `{"answer": [...], "status": [...]}`); `new_rows` (`[{id, question}]` for the NEW- rows); the
-`basicFilter` exactly as read (leave it out if there's none); and the material: pasted text as
-`material`, saved files as `files`. If the sheet wasn't made by `/ops-create-scope`, also pass `merchant_name`.
+`basicFilter` exactly as read (leave it out if there's none); `sheet_tabs` (every tab's `sheet_id` and
+`title`); and the material: pasted text as `material`, saved files as `files`, each with its `label`,
+`kind` and `date`. If the sheet wasn't made by `/ops-create-scope`, also pass `merchant_name`.
 
 It returns a `draft_id`, a `summary` and `requests`. If it returns `pending` with a `job_id` instead (our
 model is still working), call **`im_answers_wait`** with that `job_id`, again if it is still pending,
 until you get the result. Never call `im_answers_start` twice for the same tab and material. If it
-refuses because something was passed wrongly, fix that and call again. If our model is unavailable, tell
-the IM in one line and stop: nothing was written.
+refuses because something was passed wrongly, fix that and call again. If it refuses because the
+material was already used on this tab, tell the IM in one line (which pieces, and when) and stop:
+nothing was written. The summary's `already_used` lists pieces it skipped for that reason while using
+the rest. If our model is unavailable, tell the IM in one line and stop: nothing was written.
 
 ## 4. Write to the tab
 
@@ -86,9 +99,14 @@ Keep it short. With several tabs, give the counts per tab:
 
 - the sheet, as a link on its name;
 - how many answers were filled, per tab. Each filled answer is marked `suggested` in the `status`
-  column, with its `source`, `confidence` and an `ai_note`. Their own answers were kept;
-- each conflict: the tab, the question, their answer and what the material says. Their answer stays and
-  the finding is in `ai_note`. Ask whether they want any of them changed;
+  column, with its `source` (the material's label and date), `confidence` and an `ai_note`. Their own
+  answers were kept, and the ones the material agreed with are now `confirmed` (`confirmed_yours`);
+- each conflict: the tab, the question, their answer and what the material says. Their answer stays,
+  the finding is in `ai_note` and the row's `status` is `conflict`. They resolve it in the sheet: keep
+  theirs and set `confirmed`, or change the answer. Ask whether they want any of them changed;
+- any pieces skipped as already used on that tab (`already_used`);
+- the **Scope log** tab (`scope_log`: whether it was added, and how many lines): one line per change,
+  with the date, track, question and source. It is the scope's history; they don't need to edit it;
 - the **Suggested additions** at the end of each tab, if any: bank questions the material answered that
   weren't in that track, and new questions no bank question covers. They review them in the sheet:
   keep, edit or delete the rows, or set `status`;
@@ -106,6 +124,7 @@ run picks the change up. Don't change any other rows or columns.
 
 - The material is only passed to `im_answers_start`. Never write it into the sheet, a doc or a message,
   and don't quote it back.
-- Only the chosen track tabs are changed: empty answers, the review columns and the additions at the
-  end. Don't share the sheet, and don't trash files.
+- Only the chosen track tabs and the Scope log tab are changed: empty answers, the review columns, the
+  `status` of rows the material confirms or contradicts, the additions at the end, and lines appended
+  to the log. Don't share the sheet, and don't trash files.
 - If something fails after a batch, say where things stand (which tabs are done) and give the sheet's link.

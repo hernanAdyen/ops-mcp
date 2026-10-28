@@ -40,20 +40,27 @@ Kind = Literal["transcript", "summary", "notes", "email", "document"]
 
 
 class MaterialArg(BaseModel):
-    label: str = Field(description="Short label the IM will see as the source, e.g. 'Call summary, Oct 24'")
+    label: str = Field(description="Short label the IM will see as the source, e.g. 'Call summary'")
     kind: Kind = "notes"
+    date: str | None = Field(default=None, description="The day of the call, email or document, YYYY-MM-DD, if known")
     text: str = Field(description="The material as the IM gave it")
 
 
 class FileArg(BaseModel):
     label: str = Field(description="Short label the IM will see as the source")
     kind: Kind = "transcript"
+    date: str | None = Field(default=None, description="The day of the call, email or document, YYYY-MM-DD, if known")
     file: str = Field(description="File name in the inputs/ folder")
 
 
 class NewRowArg(BaseModel):
     id: str = Field(description="The row's ID in column A, e.g. NEW-0003")
     question: str = Field(description="Its text in the question column, as it is now")
+
+
+class SheetTabArg(BaseModel):
+    sheet_id: int = Field(description="The tab's sheetId (sheets.properties.sheetId)")
+    title: str = Field(description="The tab's title")
 
 
 class TrackArg(BaseModel):
@@ -385,11 +392,15 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "name; a one-track scope has the tab Project Scope), sheetId, columnCount and rowCount; "
             "the header row; column A; and `columns`: the answer column plus any source, confidence, status and "
             "ai_note columns, each as read starting with its header), the NEW- rows with their current question "
-            "text, the tab's basicFilter if it has one, and the merchant material: pasted text as `material`, or "
-            "files saved in the inputs/ folder as `files`. Our model finds answers and new questions; the material "
-            "is used for this run only and never stored. Returns a draft_id, a short summary and `requests`: send "
-            "them unchanged, in one Sheets batch update on the sheet. They fill only empty answers, add review "
-            "columns and a 'Suggested additions' section. Never compute row numbers yourself."
+            "text, the tab's basicFilter if it has one, `sheet_tabs` (every tab's sheetId and title, so the Scope "
+            "log tab is found or added), and the merchant material: pasted text as `material`, or files saved in "
+            "the inputs/ folder as `files`, each with its date (YYYY-MM-DD) when known. Our model finds answers "
+            "and new questions; the material is used for this run only and never stored. Material already used "
+            "on this tab is skipped (refused when nothing else is passed). Returns a draft_id, a short summary and "
+            "`requests`: send them unchanged, in one Sheets batch update on the sheet. They fill only empty "
+            "answers, confirm the IM's answers the material agrees with, mark a different finding `conflict` in "
+            "the status column with the finding in ai_note, add review columns, a 'Suggested additions' section "
+            "and one line per change to the Scope log tab. Never compute row numbers yourself."
         ),
     )
     async def im_answers_start(
@@ -404,6 +415,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         files: list[FileArg] | None = None,
         new_rows: list[NewRowArg] | None = None,
         basic_filter: dict | None = None,
+        sheet_tabs: list[SheetTabArg] | None = None,
         merchant_name: str | None = None,
         tab_title: str = "Project Scope",
     ) -> str:
@@ -411,7 +423,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         folder = inputs_dir(settings)
         for f in files or []:
             try:
-                pieces.append({"label": f.label, "kind": f.kind, "text": read_input(folder, f.file)})
+                pieces.append({"label": f.label, "kind": f.kind, "date": f.date, "text": read_input(folder, f.file)})
             except (ValueError, FileNotFoundError) as exc:
                 return str(exc)
         if not pieces:
@@ -422,6 +434,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "column_count": column_count, "row_count": row_count, "header_row": header_row,
             "id_column": id_column, "columns": columns,
             "new_rows": [r.model_dump() for r in new_rows or []], "basic_filter": basic_filter or None,
+            "sheet_tabs": [t.model_dump() for t in sheet_tabs] if sheet_tabs is not None else None,
             "material": pieces,
         }
         return await job_reply("POST", "/answers/jobs", body)

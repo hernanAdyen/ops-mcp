@@ -13,7 +13,7 @@ from imcp.scope.runs import CallPromptRequest, RunError, StartRequest, call_prom
 from tests.db.conftest import session_on
 from tests.db.test_scope import CAPITAL, COLUMN, SETTINGS, TOKENS, loaded, plan, record
 from tests.fakes import FakeModel
-from tests.test_sheet_plan import FakeTab
+from tests.test_sheet_plan import FakeBook, FakeTab
 
 HEADER = ["id", "enum", "question", "options", "answer", "notes", "priority", "subsection", "channels", "pillars",
           "category", "platform"]
@@ -96,7 +96,8 @@ def test_a_run_is_on_one_named_tab(session):
     assert out["summary"]["tab"] == "Project Scope" and rec["tab"] == "Project Scope"
     trace = session.get(Generation, out["draft_id"]).trace
     assert trace["tab_title"] == "Project Scope" and trace["tab_sheet_id"] == 7
-    out2 = start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, tab_title="In-person UK", tab_sheet_id=7))
+    out2 = start_answers(session, SETTINGS, FakeModel(REPLY), start_request(
+        tab, tab_title="In-person UK", tab_sheet_id=7, material=[{"label": "Call 2", "kind": "notes", "text": "new notes"}]))
     assert out2["summary"]["tab"] == "In-person UK"
     with pytest.raises(RunError) as err:
         start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, tab_title="Capital", id_column=["ID-0001"]))
@@ -148,7 +149,10 @@ def test_a_second_run_sees_what_the_im_did_and_keeps_their_answers(session):
     assert s["im_review_seen"] == {"confirmed": 1} and s["review_columns_added"] == []
     assert s["conflicts"] == [{"id": "ID-0004", "question": "Primary driver for Capital?", "yours": "TRUE",
                                "found": "FALSE", "source": "Call 2"}]
-    assert s["agreed_with_yours"] == 1 and capital[answer] == "TRUE"
+    assert s["agreed_with_yours"] == 1 and s["confirmed_yours"] == 0 and capital[answer] == "TRUE"
+    assert capital[status] == "conflict" and "Call 2 says: FALSE" in capital[tab.rows[0].index("ai_note")]
+    tokens = next(r for r in tab.rows if r[0] == "ID-0003")
+    assert tokens[status] == "suggested" and tokens[tab.rows[0].index("source")] == "Call summary, Oct 24; Call 2"
     assert tab.column(0)[-3:] == ["ID-0006", "NEW-0001", "NEW-0002"]
     assert [r[question] for r in tab.rows].count(ADDITIONS_LABEL) == 1
     first = next(i for i in session.scalars(select(Instance)) if i.extraction["sheet_ref"] == "NEW-0001")
@@ -156,11 +160,80 @@ def test_a_second_run_sees_what_the_im_did_and_keeps_their_answers(session):
     assert rec["queue"]["sent"] == 1
 
 
+def test_material_dates_go_into_the_source_and_confirm_the_ims_own_answers(session):
+    tab, _ = scope_sheet(session)
+    answer = tab.rows[0].index("answer")
+    next(r for r in tab.rows if r[0] == "ID-0004")[answer] = "TRUE"  # the IM's own answer, no status yet
+    reply = {"answers": [{"id": "ID-0004", "answer": "yes", "source": "Call summary"},
+                         {"id": "ID-0001", "answer": "Moving off their processor", "source": "Email from finance"}]}
+    out, rec = run_answers(session, tab, reply=reply, material=[
+        {"label": "Call summary", "kind": "summary", "date": "2026-10-24", "text": "first call"},
+        {"label": "Email from finance", "kind": "email", "text": "an email"}])
+    source, status = (tab.rows[0].index(n) for n in ("source", "status"))
+    capital = next(r for r in tab.rows if r[0] == "ID-0004")
+    assert capital[answer] == "TRUE" and capital[status] == "confirmed" and capital[source] == "Call summary, 2026-10-24"
+    background = next(r for r in tab.rows if r[0] == "ID-0001")
+    assert background[source] == "Email from finance" and background[status] == "suggested"  # no date given
+    assert out["summary"]["confirmed_yours"] == 1 and rec["confirmed_yours"] == 1
+    assert out["summary"]["scope_log"] == {"tab_added": False, "rows": 0, "note": "no Scope log: the sheet's tabs weren't passed"}
+
+
+def test_the_scope_log_tab_is_added_then_appended_to(session):
+    tab, _ = scope_sheet(session)
+    book = FakeBook({7: tab}, {7: "Project Scope"})
+    out = start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, sheet_tabs=[{"sheet_id": 7, "title": "Project Scope"}]))
+    book.apply(out["requests"])
+    assert out["summary"]["scope_log"] == {"tab_added": True, "rows": 4, "note": None}
+    [log_id] = [sid for sid in book.tabs if sid != 7]
+    log = book.tabs[log_id]
+    assert book.titles[log_id] == "Scope log" and log.frozen_rows == 1 and 0 in log.bold_rows
+    assert log.rows[0] == ["logged_at", "track", "id", "question", "change", "answer", "source", "confidence", "note"]
+    assert [r[2:5] for r in log.rows[1:5]] == [
+        ["ID-0001", "Project Background", "filled"], ["ID-0003", "Do you need to migrate tokens?", "filled"],
+        ["ID-0006", "Terminal form factor", "added from the bank"], ["NEW-0001", None, "new question"]]
+    assert log.rows[1][1] == "Project Scope" and log.rows[1][5] == "Moving off their current processor"
+    assert log.rows[1][6] == CALL and log.rows[1][8] == "moving processors" and "UTC" in log.rows[1][0]
+    assert log.rows[4][8].startswith("Can one job be paid partly")  # a new question's text is its note
+    record_answers(session, SETTINGS, out["draft_id"], AnswersRecordRequest(
+        sheet_url=f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit", id_column=[v or "" for v in tab.column(0)]))
+    # the next run finds the tab by title and appends after the last line
+    reply = {"answers": [{"id": "ID-0004", "answer": "no", "source": "Call 2"}]}
+    out2 = start_answers(session, SETTINGS, FakeModel(reply), start_request(
+        tab, material=[{"label": "Call 2", "kind": "notes", "date": "2026-10-30", "text": "second call"}],
+        sheet_tabs=[{"sheet_id": 7, "title": "Project Scope"}, {"sheet_id": log_id, "title": "Scope log"}]))
+    book.apply(out2["requests"])
+    assert out2["summary"]["scope_log"] == {"tab_added": False, "rows": 1, "note": None}
+    assert len(book.tabs) == 2 and log.rows[5][2:7] == ["ID-0004", "Primary driver for Capital?", "filled", "FALSE", "Call 2, 2026-10-30"]
+    assert session.get(Generation, out2["draft_id"]).trace["scope_log"] == {"tab_added": False, "rows": 1, "sheet_id": log_id}
+
+
+def test_material_already_used_on_the_tab_is_skipped_or_refused(session):
+    tab, _ = scope_sheet(session)
+    run_answers(session, tab)  # recorded: the Oct 24 summary is now used on this tab
+    with pytest.raises(RunError) as err:
+        start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab))
+    assert err.value.status == 409 and "already used for the 'Project Scope' tab" in err.value.detail["error"]
+    assert "Call summary, Oct 24" in err.value.detail["error"] and "Nothing was written" in err.value.detail["error"]
+    # the same text on another tab is fine: that's how several tracks are filled
+    other = start_answers(session, SETTINGS, FakeModel(REPLY), start_request(tab, tab_title="In-person UK", tab_sheet_id=8))
+    assert other["summary"]["already_used"] == []
+    # a mix: the repeat is dropped, the new piece is used, and the summary says so
+    model = FakeModel({"answers": [{"id": "ID-0004", "answer": "no", "source": "Call 2"}]})
+    out = start_answers(session, SETTINGS, model, start_request(tab, material=[
+        {"label": "Call summary, Oct 24", "kind": "summary", "text": MATERIAL},
+        {"label": "Call 2", "kind": "notes", "text": "second call"}]))
+    assert out["summary"]["already_used"] == ["Call summary, Oct 24"] and out["summary"]["filled"] == 1
+    assert "SECRET-MATERIAL" not in model.calls[0][1]["content"] and "second call" in model.calls[0][1]["content"]
+    trace = session.get(Generation, out["draft_id"]).trace
+    assert trace["already_used"] == 1 and len(trace["material"]) == 1
+
+
 def test_removed_new_questions_are_noted(session):
     tab, _ = scope_sheet(session)
     run_answers(session, tab, settings=QUEUE_ON)
     tab.rows = [r for r in tab.rows if r[0] != "NEW-0001"]  # the IM deleted the row
-    out = start_answers(session, QUEUE_ON, FakeModel({"answers": []}), start_request(tab))
+    out = start_answers(session, QUEUE_ON, FakeModel({"answers": []}),
+                        start_request(tab, material=[{"label": "Call 2", "kind": "notes", "text": "second call"}]))
     assert out["summary"]["im_review_seen"] == {"removed": 1}
     [inst] = session.scalars(select(Instance)).all()
     assert inst.extraction["im_status"] == "removed"

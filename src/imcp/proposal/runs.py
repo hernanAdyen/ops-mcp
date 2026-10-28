@@ -139,6 +139,7 @@ def start_proposal(session: Session, settings: AppSettings, embedder, req: Propo
                     "suggested_ids": t.suggested_ids,
                     "open_p1_ids": t.open_p1_ids,
                     "skipped_rejected_ids": t.skipped_rejected_ids,
+                    "conflict_ids": t.conflict_ids,
                     "not_loaded": t.not_loaded,
                     "feature_rows": len(feature_rows(t)),
                     "doc_urls": [d["url"] for d in b["doc_pages"]],

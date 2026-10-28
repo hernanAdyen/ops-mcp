@@ -23,7 +23,7 @@ BANK = {x.question_id: x for x in [
 IDS = ["ID-0083", "ID-0084", "ID-0001", "ID-0002", "ID-0003", "ID-0004", "ID-0005", "ID-0006", "ID-9999", "NEW-0001", "", "ID-0001"]
 COLUMNS = {
     "answer": ["Moving from a legacy PSP", "Launch in Q1", "UK and NL", "Acme PSP", "yes", "No", "iDEAL | Cards", "", "x", "Partly by insurer", "", "dup"],
-    "status": ["", "confirmed", "suggested", "rejected", "", "", "suggested", "", "", "", "", ""],
+    "status": ["", "confirmed", "suggested", "rejected", "conflict", "", "suggested", "", "", "", "", ""],
     "source": ["", "Call summary", "Call summary", "Call summary", "", "", "Email", "", "", "", "", ""],
     "question": ["", "", "", "", "", "", "", "", "", "Can one job be paid by two parties?", "", ""],
 }
@@ -37,11 +37,12 @@ def test_pick_answers_applies_the_rules():
     assert by_id["ID-0001"].origin == "suggested" and by_id["ID-0001"].answer == "UK and NL"  # the duplicate row is ignored
     assert "ID-0002" not in by_id and track.skipped_rejected_ids == ["ID-0002"]
     assert by_id["ID-0005"].origin == "suggested"  # a source and not confirmed
+    assert by_id["ID-0003"].origin == "suggested" and track.conflict_ids == ["ID-0003"]  # a later call disagreed: flagged
     assert "ID-0006" not in by_id and track.open_p1_ids == ["ID-0006"]  # unanswered P1
     assert track.not_loaded == ["ID-9999"]
     new = by_id["NEW-0001"]
     assert (new.question, new.subsection, new.type, new.origin) == ("Can one job be paid by two parties?", "discovery", "free_text", "own")
-    assert track.suggested_ids == ["ID-0001", "ID-0005"]
+    assert track.suggested_ids == ["ID-0001", "ID-0003", "ID-0005"]
     assert [a.id for a in track.by_subsection("discovery")] == ["ID-0001", "NEW-0001"]
 
 

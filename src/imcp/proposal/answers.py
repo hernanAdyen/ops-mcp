@@ -3,6 +3,7 @@
 Rules (agreed 2026-10-26):
   - The IM's own answer wins: no `source`, or `status` confirmed.
   - A `suggested` answer (found by /ops-answer-scope, not yet confirmed) is used, but flagged.
+  - A `conflict` answer (a later call said something else; see ai_note) is used as it stands, but flagged.
   - A `rejected` answer is skipped.
   - Unanswered questions are left out of the document; the open priority-1 ones are listed in the reply.
   - NEW- rows (the IM's own additions) count as Discovery questions, with the text from the sheet.
@@ -58,6 +59,7 @@ class TrackAnswers:
     answers: list[Answer] = field(default_factory=list)
     open_p1_ids: list[str] = field(default_factory=list)  # priority-1 bank questions with no usable answer
     skipped_rejected_ids: list[str] = field(default_factory=list)
+    conflict_ids: list[str] = field(default_factory=list)  # status conflict: used as they stand, flagged
     not_loaded: list[str] = field(default_factory=list)  # ID- rows the bank doesn't know
 
     def by_subsection(self, subsection: str) -> list[Answer]:
@@ -110,7 +112,9 @@ def pick_answers(name: str, ids: list[str], columns: dict[str, list[str]], bank:
             if q is not None and q.priority == 1:
                 out.open_p1_ids.append(qid)
             continue
-        origin = SUGGESTED if (source_col[i] and status != "confirmed") or status == "suggested" else OWN
+        origin = SUGGESTED if (source_col[i] and status != "confirmed") or status in ("suggested", "conflict") else OWN
+        if status == "conflict":
+            out.conflict_ids.append(qid)
         if q is None:  # a NEW- row the IM kept
             text = question_col[i]
             if not text:

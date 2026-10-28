@@ -96,6 +96,18 @@ class FakeTab:
                 self.title = body["properties"]["title"]
             elif kind == "updateSheetProperties":
                 self.control_after = body["properties"]["gridProperties"]["rowGroupControlAfter"]
+            elif kind == "appendCells":
+                # Like Sheets: the rows go after the last row that has data, growing the grid if needed
+                assert body["sheetId"] == self.tab
+                width = len(self.rows[0])
+                last = max((i for i, row in enumerate(self.rows) if any(v is not None for v in row)), default=-1)
+                for n, row in enumerate(body["rows"]):
+                    values = [cell.get("userEnteredValue", {}).get("stringValue") for cell in row["values"]]
+                    assert len(values) <= width
+                    target = last + 1 + n
+                    while target >= len(self.rows):
+                        self.rows.append([None] * width)
+                    self.rows[target] = values + [None] * (width - len(values))
             else:
                 raise AssertionError(f"unexpected request {kind}")
             if "sheetId" in rng:
@@ -145,7 +157,8 @@ class FakeBook:
                 props = body["properties"]
                 assert props["sheetId"] not in self.tabs, f"sheetId {props['sheetId']} is taken"
                 grid = props["gridProperties"]
-                self.tabs[props["sheetId"]] = FakeTab([""] * grid["rowCount"], width=grid["columnCount"], tab=props["sheetId"])
+                self.tabs[props["sheetId"]] = FakeTab([None] * grid["rowCount"], width=grid["columnCount"], tab=props["sheetId"])
+                self.tabs[props["sheetId"]].frozen_rows = grid.get("frozenRowCount", 0)
                 self.order.insert(props.get("index", len(self.order)), props["sheetId"])
                 self.titles[props["sheetId"]] = props["title"]
             else:

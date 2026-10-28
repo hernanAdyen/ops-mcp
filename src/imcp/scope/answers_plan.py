@@ -1,23 +1,33 @@
 """Write the answers found in the IM's merchant material into the scope sheet's Project Scope tab.
 
 One exact Sheets batch, as for /ops-create-scope, so no row arithmetic is left to the model:
-  - fill the answers the IM hasn't given. Theirs always win: a different finding goes in a note.
+  - fill the answers the IM hasn't given. Theirs always win: a different finding goes in a note and
+    the row's status becomes `conflict`; a finding that agrees with the IM's own answer confirms it.
   - review columns to the right of the existing ones: source, confidence, status (a dropdown:
-    suggested / confirmed / rejected) and ai_note
+    suggested / confirmed / rejected / conflict) and ai_note
   - the 'Suggested additions' section at the end (see additions.py)
   - the tab's filter is put back over the new rows and columns
+  - one line per change appended to the sheet's 'Scope log' tab (added when the sheet has none): the
+    scope is built over several meetings, and the log is its history. The IM never needs to edit it.
 Rows are only added at the end and columns only at the right, so nothing the IM has moves.
 """
 
 from dataclasses import dataclass, field
 
 from imcp.scope.additions import row_from, section_requests
-from imcp.scope.sheet_plan import restore_filter
+from imcp.scope.sheet_plan import new_sheet_ids, restore_filter
 
 REVIEW_COLUMNS = ("source", "confidence", "status", "ai_note")
-STATUS_VALUES = ("suggested", "confirmed", "rejected")
+STATUS_VALUES = ("suggested", "confirmed", "rejected", "conflict")
 REVIEW_WIDTHS = {"source": 170, "ai_note": 340}
 MAX_NOTE = 500
+
+SCOPE_LOG_TAB = "Scope log"
+SCOPE_LOG_COLUMNS = ("logged_at", "track", "id", "question", "change", "answer", "source", "confidence", "note")
+SCOPE_LOG_WIDTHS = {"logged_at": 150, "question": 320, "answer": 240, "source": 170, "note": 320}
+# What a log line says happened to the row
+FILLED, CONFIRMED, AGREED, CONFLICT, ADDED_FROM_BANK, NEW_QUESTION = (
+    "filled", "confirmed your answer", "agreed with the suggested answer", "conflict", "added from the bank", "new question")
 
 
 @dataclass
@@ -45,10 +55,12 @@ class SheetRead:
 class Merge:
     updates: dict[int, dict[str, str]] = field(default_factory=dict)  # sheet row -> column name -> value
     filled: list[str] = field(default_factory=list)
-    agreed: list[str] = field(default_factory=list)
+    agreed: list[str] = field(default_factory=list)  # the finding matches the answer in the sheet
+    confirmed: list[str] = field(default_factory=list)  # ... and that answer was the IM's own: now confirmed
     conflicts: list[dict] = field(default_factory=list)
     skipped_rejected: list[str] = field(default_factory=list)
     answered: set[str] = field(default_factory=set)  # IDs with an answer once the batch is applied
+    log: list[dict] = field(default_factory=list)  # one entry per change, for the Scope log tab
 
 
 def _norm(value: str) -> str:
@@ -74,6 +86,10 @@ def merge_answers(sheet: SheetRead, answers: list[dict]) -> Merge:
     """
     answers: findings for questions in the sheet (id, answer, source, evidence, confidence, problem).
     The IM's answer is never overwritten, and an answer they rejected isn't written again.
+    Over several meetings: a finding that agrees with the IM's own answer confirms it (status
+    `confirmed`, the source recorded); one that agrees with a suggested answer adds its source and
+    leaves the status to the IM; a different finding goes in the note and sets the status to `conflict`,
+    which the IM resolves in the sheet (keep theirs and confirm, or change the answer).
     """
     merge = Merge()
     rows = {}
@@ -86,10 +102,12 @@ def merge_answers(sheet: SheetRead, answers: list[dict]) -> Merge:
         i = rows.get(a["id"])
         if i is None:
             continue
-        row, value = i + 1, a["answer"]  # +1: the header is row 0
+        row, value, state = i + 1, a["answer"], status[i].lower()  # +1: the header is row 0
         evidence = "; ".join(x for x in (a.get("evidence"), a.get("problem")) if x)
+        entry = {"id": a["id"], "answer": value, "source": a["source"], "confidence": a.get("confidence") or "",
+                 "note": evidence}
         if not current[i]:
-            if status[i].lower() == "rejected":
+            if state == "rejected":
                 merge.updates[row] = {"ai_note": add_note(note[i], f"{a['source']} says: {value}")}
                 merge.skipped_rejected.append(a["id"])
                 continue
@@ -97,15 +115,70 @@ def merge_answers(sheet: SheetRead, answers: list[dict]) -> Merge:
                                   "status": "suggested", "ai_note": evidence}
             merge.filled.append(a["id"])
             merge.answered.add(a["id"])
+            merge.log.append({**entry, "change": FILLED})
         elif same_answer(current[i], value):
             merge.agreed.append(a["id"])
-            if status[i] and a["source"].casefold() not in source[i].casefold():
-                merge.updates[row] = {"source": f"{source[i]}; {a['source']}" if source[i] else a["source"]}
+            update: dict[str, str] = {}
+            if a["source"].casefold() not in source[i].casefold():
+                update["source"] = f"{source[i]}; {a['source']}" if source[i] else a["source"]
+            if not state:  # the IM's own answer, not reviewed yet: the material confirms it
+                update["status"] = "confirmed"
+                merge.confirmed.append(a["id"])
+                merge.log.append({**entry, "change": CONFIRMED})
+            else:
+                merge.log.append({**entry, "change": AGREED})
+            if update:
+                merge.updates[row] = update
         else:
-            merge.updates[row] = {"ai_note": add_note(note[i], f"{a['source']} says: {value}")}
+            update = {"ai_note": add_note(note[i], f"{a['source']} says: {value}")}
+            if state != "rejected":
+                update["status"] = "conflict"
+            merge.updates[row] = update
             merge.conflicts.append({"id": a["id"], "yours": current[i], "found": value, "source": a["source"],
                                     "earlier_ai_answer": bool(status[i])})
+            merge.log.append({**entry, "change": CONFLICT, "note": f"the sheet says: {current[i]}"})
     return merge
+
+
+def plan_scope_log(tabs: list[tuple[int, str]] | None, track: str, entries: list[dict], logged_at: str,
+                   questions: dict[str, str]) -> dict:
+    """
+    The requests that append one line per entry to the sheet's Scope log tab, adding the tab when
+    there isn't one. Pure: the caller gives the sheet's tabs (sheetId, title) as read.
+    tabs       None when the skill didn't read them: then nothing is logged
+    entries    {id, change, answer, source, confidence, note}
+    questions  question text by ID, for the log's own question column
+    """
+    if tabs is None or not entries:
+        return {"requests": [], "tab_added": False, "rows": 0, "sheet_id": None}
+    existing = next((sid for sid, title in tabs if title.strip().casefold() == SCOPE_LOG_TAB.casefold()), None)
+    sheet_id = existing if existing is not None else new_sheet_ids([sid for sid, _ in tabs], 1)[0]
+    width = len(SCOPE_LOG_COLUMNS)
+    reqs: list[dict] = []
+    if existing is None:
+        reqs.append({"addSheet": {"properties": {
+            "sheetId": sheet_id, "title": SCOPE_LOG_TAB,
+            "gridProperties": {"rowCount": 2, "columnCount": width, "frozenRowCount": 1}}}})
+        reqs.append({"updateCells": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": width},
+            "rows": [{"values": [_cell(n) for n in SCOPE_LOG_COLUMNS]}], "fields": "userEnteredValue"}})
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": width},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}}, "fields": "userEnteredFormat.textFormat.bold"}})
+        for name, pixels in SCOPE_LOG_WIDTHS.items():
+            index = SCOPE_LOG_COLUMNS.index(name)
+            reqs.append({"updateDimensionProperties": {
+                "range": {"sheetId": sheet_id, "dimension": "COLUMNS", "startIndex": index, "endIndex": index + 1},
+                "properties": {"pixelSize": pixels}, "fields": "pixelSize"}})
+    rows = []
+    for e in entries:
+        values = {"logged_at": logged_at, "track": track, "id": e["id"], "question": questions.get(e["id"], ""),
+                  "change": e["change"], "answer": e.get("answer") or "", "source": e.get("source") or "",
+                  "confidence": e.get("confidence") or "", "note": (e.get("note") or "")[:MAX_NOTE]}
+        rows.append({"values": [_cell(values[n]) for n in SCOPE_LOG_COLUMNS]})
+    # appendCells adds the rows after the last row with data: no row arithmetic, and nothing moves
+    reqs.append({"appendCells": {"sheetId": sheet_id, "rows": rows, "fields": "userEnteredValue"}})
+    return {"requests": reqs, "tab_added": existing is None, "rows": len(rows), "sheet_id": sheet_id}
 
 
 def _runs(rows: list[int]) -> list[tuple[int, int]]:

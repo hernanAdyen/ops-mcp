@@ -8,7 +8,15 @@
 
 The material is sent to our model for this run only. It is never stored or logged, and neither are
 the answers: the run's trace keeps question IDs, counts and a hash of each piece of material.
+
+The scope is built over several meetings. Each piece of material can carry its date, which goes into
+the sheet's `source` column; a finding that agrees with the IM's own answer confirms it and a
+different one marks the row `conflict`; every change is appended to the sheet's Scope log tab; and
+material already used on the same tab (same text, by its hash) is skipped, or refused when there is
+nothing else.
 """
+
+import re
 
 from datetime import datetime, timezone
 from typing import Literal
@@ -23,7 +31,7 @@ from imcp.config import AppSettings, describe_config
 from imcp.db import enums as E
 from imcp.db.models import Generation, Merchant, Opportunity, Question
 from imcp.scope.additions import NEW_ID, bank_cells, label_needed, new_cells, new_ids
-from imcp.scope.answers_plan import REVIEW_COLUMNS, SheetRead, plan_answers
+from imcp.scope.answers_plan import ADDED_FROM_BANK, NEW_QUESTION, REVIEW_COLUMNS, SheetRead, plan_answers, plan_scope_log
 from imcp.scope.candidates import bank_status
 from imcp.scope.extract import MAX_MATERIAL_CHARS, Material, extract_answers
 from imcp.scope.queue import add_candidates, observe_im_review, sha256
@@ -35,10 +43,25 @@ FOUND_IN_MATERIAL, FOUND_NEW = "answered in material", "new question"
 MAX_OPEN_LISTED = 10
 
 
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
 class MaterialIn(BaseModel):
-    label: str = Field(min_length=1, max_length=80, description="e.g. 'Call summary, Oct 24'")
+    label: str = Field(min_length=1, max_length=80, description="e.g. 'Call summary'")
     kind: Literal["transcript", "summary", "notes", "email", "document"] = "notes"
+    date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$",
+                             description="The day of the call, email or document (YYYY-MM-DD), if known")
     text: str = Field(min_length=1, max_length=MAX_MATERIAL_CHARS)
+
+    def source(self) -> str:
+        """What the sheet's source column says: the label with the date, e.g. 'Call summary, 2026-10-24'."""
+        label = self.label.strip()
+        return f"{label}, {self.date}" if self.date and self.date not in label else label
+
+
+class TabIn(BaseModel):
+    sheet_id: int
+    title: str = Field(max_length=100)
 
 
 class NewRowIn(BaseModel):
@@ -59,6 +82,8 @@ class AnswersStartRequest(BaseModel):
     columns: dict[str, list[str]] = Field(default_factory=dict)
     new_rows: list[NewRowIn] = Field(default_factory=list)
     basic_filter: dict | None = None
+    sheet_tabs: list[TabIn] | None = Field(default=None, description="Every tab of the sheet (sheetId, title), "
+                                           "so the Scope log tab can be found or added")
     material: list[MaterialIn] = Field(min_length=1, max_length=10)
 
     @model_validator(mode="after")
@@ -114,6 +139,19 @@ def _earlier_runs(session: Session, sheet_id: str, tab_sheet_id: int) -> list[Ge
     return [g for g in runs if g.trace.get("tab_sheet_id", tab_sheet_id) == tab_sheet_id]
 
 
+def _already_used(earlier: list[Generation]) -> dict[str, str]:
+    """Hash of each piece of material used by a recorded run on this tab -> the day it was recorded."""
+    used: dict[str, str] = {}
+    for g in earlier:
+        if g.trace.get("stage") != "recorded":
+            continue  # a run whose batch may never have been sent doesn't count
+        day = (g.trace.get("recorded_at") or "")[:10]
+        for m in g.trace.get("material", []):
+            if m.get("sha256"):
+                used.setdefault(m["sha256"], day)
+    return used
+
+
 def start_answers(session: Session, settings: AppSettings, model, req: AnswersStartRequest) -> dict:
     if not bank_status(session, settings)["active_questions"]:
         raise RunError(409, "The question bank isn't loaded yet. Load it with im_bank_load first.")
@@ -138,16 +176,29 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     im_review = observe_im_review(session, opp.opportunity_id, sheet_new, merchant_name) \
         if opp is not None and settings.FLAG_CANDIDATE_QUEUE else {}
 
-    materials = [Material(m.label.strip(), m.kind, m.text) for m in req.material]
+    earlier = _earlier_runs(session, req.sheet_id, req.tab_sheet_id)
+    used = _already_used(earlier)
+    repeats = [m for m in req.material if sha256(m.text) in used]
+    if len(repeats) == len(req.material):
+        days = sorted({used[sha256(m.text)] for m in repeats if used[sha256(m.text)]})
+        raise RunError(409, f"This material was already used for the {req.tab_title.strip()!r} tab"
+                            + (f" on {', '.join(days)}" if days else "") + ": "
+                            + ", ".join(m.label.strip() for m in repeats)
+                            + ". Nothing was written. Pass material that is new, or run it on another tab.")
+    fresh = [m for m in req.material if sha256(m.text) not in used]
+    materials = [Material(m.label.strip(), m.kind, m.text) for m in fresh]
+    source_of = {m.label.strip().casefold(): m.source() for m in fresh}
     extraction = extract_answers(model, materials, sheet_questions, others,
                                  [r.question for r in req.new_rows if r.question.strip()], merchant_name,
                                  sanitize=settings.FLAG_SANITIZE, track=req.tab_title.strip())
     if extraction.status != "ok":
         raise RunError(503, f"{extraction.note} Nothing was written to the sheet.")
 
+    for a in extraction.answers + extraction.new_questions:  # the sheet shows the source with its date
+        a["source"] = source_of.get(a["source"].casefold(), a["source"])
     in_sheet = [a for a in extraction.answers if a["in_sheet"]]
     from_bank = [a for a in extraction.answers if not a["in_sheet"]]
-    kind_of = {m.label.casefold(): m.kind for m in materials}
+    kind_of = {m.source().casefold(): m.kind for m in fresh}
     additions: list[dict] = []
     for a in from_bank:
         additions.append({**bank_cells(bank[a["id"]]), "answer": a["answer"], "found_by": FOUND_IN_MATERIAL,
@@ -162,11 +213,20 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
                           "source": item["source"], "status": "suggested", "ai_note": note})
         new_rows.append({"id": new_id, **item, "source_kind": kind_of.get(item["source"].casefold(), materials[0].kind)})
 
-    added_before = {qid for g in _earlier_runs(session, req.sheet_id, req.tab_sheet_id)
-                    for qid in g.trace.get("added_bank_ids", [])}
+    added_before = {qid for g in earlier for qid in g.trace.get("added_bank_ids", [])}
     plan = plan_answers(sheet, in_sheet, additions, label_needed(sheet.ids, added_before))
     merge = plan["merge"]
     open_p1 = [q.question_id for q in sheet_questions if q.priority == 1 and q.question_id not in merge.answered]
+
+    text = {q.question_id: q.text for q in bank.values()}
+    log_entries = list(merge.log)
+    log_entries += [{"id": a["id"], "change": ADDED_FROM_BANK, "answer": a["answer"], "source": a["source"],
+                     "confidence": a["confidence"], "note": a["ai_note"]} for a in additions if a["id"] in bank]
+    log_entries += [{"id": r["id"], "change": NEW_QUESTION, "answer": r["answer"] or "", "source": r["source"],
+                     "confidence": "", "note": r["question"]} for r in new_rows]
+    log = plan_scope_log([(t.sheet_id, t.title) for t in req.sheet_tabs] if req.sheet_tabs is not None else None,
+                         req.tab_title.strip(), log_entries, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                         text)
 
     queue_on = settings.FLAG_CANDIDATE_QUEUE
     keep = ("id", "type", "options", "subsection", "raised_by", "closest_id", "source_kind")
@@ -180,10 +240,13 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
             "tab_sheet_id": req.tab_sheet_id,
             "merchant_name": None if opp else merchant_name,  # only needed to create the deal at record
             "material": [{"kind": m.kind, "chars": len(m.text), "sha256": sha256(m.text)} for m in materials],
+            "already_used": len(repeats),
             "extraction": extraction.summary(),
             "filled_ids": merge.filled,
             "agreed_ids": merge.agreed,
+            "confirmed_ids": merge.confirmed,
             "conflict_ids": [c["id"] for c in merge.conflicts],
+            "scope_log": {"tab_added": log["tab_added"], "rows": log["rows"], "sheet_id": log["sheet_id"]},
             "skipped_rejected_ids": merge.skipped_rejected,
             "added_bank_ids": [a["id"] for a in from_bank],
             # The wording is kept only when it may go to the queue; it is generic, never the IM's material.
@@ -197,17 +260,20 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     )
     session.add(gen)
     session.flush()
-    text = {q.question_id: q.text for q in bank.values()}
     return {
         "draft_id": str(gen.generation_id),
-        "requests": plan["requests"],
+        "requests": plan["requests"] + log["requests"],
         "summary": {
             "tab": req.tab_title.strip(),
             "model": extraction.model,
+            "already_used": [m.label.strip() for m in repeats],  # skipped: used on this tab before
             "filled": len(merge.filled),
             "agreed_with_yours": len(merge.agreed),
+            "confirmed_yours": len(merge.confirmed),
             "conflicts": [{"id": c["id"], "question": text[c["id"]], "yours": c["yours"], "found": c["found"],
                            "source": c["source"]} for c in merge.conflicts],
+            "scope_log": {"tab_added": log["tab_added"], "rows": log["rows"],
+                          "note": None if req.sheet_tabs is not None else "no Scope log: the sheet's tabs weren't passed"},
             "not_rewritten_rejected": len(merge.skipped_rejected),
             "added_from_bank": [{"id": a["id"], "question": text[a["id"]], "answer": a["answer"]} for a in from_bank],
             "new_questions": [{"id": r["id"], "question": r["question"], "answer": r["answer"]} for r in new_rows],
@@ -262,7 +328,9 @@ def record_answers(session: Session, settings: AppSettings, run_id: str, req: An
         "sheet_url": req.sheet_url,
         "tab": trace.get("tab_title", DEFAULT_TRACK),
         "filled": len(trace["filled_ids"]),
+        "confirmed_yours": len(trace.get("confirmed_ids", [])),
         "conflicts": len(trace["conflict_ids"]),
+        "scope_log": trace.get("scope_log", {"tab_added": False, "rows": 0}),
         "added": {"from_bank": len(trace["added_bank_ids"]), "new_questions": len(trace["new_rows"])},
         "open_priority_1": {"count": len(open_ids),
                             "first": [{"id": i, "question": texts[i]} for i in open_ids[:MAX_OPEN_LISTED] if i in texts]},
