@@ -16,6 +16,17 @@ def test_no_context_means_no_model_call():
     assert result.status == "skipped" and model.calls == []
 
 
+def test_contact_details_in_the_reply_are_scrubbed():
+    reply = {"topics": ["token migration"],
+             "additions": [{"id": "ID-0057", "topic": "token migration", "reason": "ops lead jordan@example.com wants it, call +1 614 555 0100"}],
+             "uncovered_topics": [{"topic": "loyalty", "question": "Email ops@example.com about the points program?", "type": "free_text"}]}
+    result = match_topics(FakeModel(reply), "notes", QUESTIONS)
+    assert result.additions[0]["reason"] == "ops lead [email] wants it, call [phone]"
+    assert result.gap_questions[0]["question"] == "Email [email] about the points program?"
+    off = match_topics(FakeModel(reply), "notes", QUESTIONS, sanitize=False)
+    assert "jordan@example.com" in off.additions[0]["reason"]
+
+
 def test_no_model_configured():
     assert match_topics(None, "migrating tokens", QUESTIONS).status == "unavailable"
 

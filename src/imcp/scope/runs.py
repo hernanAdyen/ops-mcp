@@ -204,7 +204,8 @@ def start_run(session: Session, settings: AppSettings, model, req: StartRequest)
         chosen = matched | {q.question_id for q in baseline_only}
         rest = {q.question_id: q for q in in_reach if q.question_id not in chosen}
         topics = match_topics(model, req.context, [brief(q) for q in rest.values()], req.merchant_name,
-                              selected=[brief(q) for q in selected], track=_track_line(track) if several else None)
+                              selected=[brief(q) for q in selected], track=_track_line(track) if several else None,
+                              sanitize=settings.FLAG_SANITIZE)
         trace_tracks.append({
             "name": track.name,
             "tags": track.tags.summary(),

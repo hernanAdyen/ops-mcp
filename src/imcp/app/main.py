@@ -3,7 +3,8 @@
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -42,6 +43,14 @@ def create_app(
     app.state.jobs = JobStore()
     app.state.model = ModelClient.from_settings(settings) if model is FROM_SETTINGS else model
     app.state.embedder = EmbeddingClient.from_settings(settings) if embedder is FROM_SETTINGS else embedder
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # FastAPI's default handler echoes the offending input, which here can be a whole transcript. The
+        # IM's chat only needs where and what went wrong (design rule 5: material never comes back out).
+        errors = [{"loc": [str(x) for x in e.get("loc", [])], "msg": e.get("msg", ""), "type": e.get("type", "")}
+                  for e in exc.errors()]
+        return JSONResponse({"detail": errors}, status_code=422)
+
     app.include_router(bank_router)
     app.include_router(scope_router)
     app.include_router(answers_router)

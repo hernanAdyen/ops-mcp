@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 from imcp.llm import ModelError, parse_json_object
-from imcp.scope.text import same_question
+from imcp.scope.text import same_question, scrub_contacts
 
 SAME_QUESTION = 0.85  # a drafted question this close to a bank question is the bank question
 
@@ -72,10 +72,14 @@ class TopicResult:
         return asdict(self)
 
 
-def _clean(value, limit: int, scrub: str | None) -> str:
+def _clean(value, limit: int, scrub: str | None, sanitize: bool = True) -> str:
+    """One line, the merchant's name replaced, and (with sanitize) contact details and keys scrubbed like
+    every other string our model writes: these go into the trace, the sheet and the review queue."""
     text = " ".join(str(value or "").split())
     if scrub:
         text = re.sub(re.escape(scrub), "the merchant", text, flags=re.IGNORECASE)
+    if sanitize:
+        text = scrub_contacts(text)
     return text[:limit]
 
 
@@ -93,7 +97,7 @@ def question_lines(questions: list[dict]) -> str:
 
 def match_topics(model: ChatModel | None, notes: str | None, questions: list[dict],
                  merchant_name: str | None = None, selected: list[dict] | None = None,
-                 track: str | None = None) -> TopicResult:
+                 track: str | None = None, sanitize: bool = True) -> TopicResult:
     """
     questions  the ones the tags didn't select: the only ones the model may add
     selected   the tag matches, shown read-only so the model can tell what's already covered
@@ -126,14 +130,15 @@ def match_topics(model: ChatModel | None, notes: str | None, questions: list[dic
     scrub = merchant_name.strip() if merchant_name and len(merchant_name.strip()) >= 3 else None
     allowed = {q["id"] for q in questions}
     result = TopicResult(status="ok", model=model.model)
-    result.topics = [t for t in (_clean(t, MAX_TOPIC, scrub) for t in _as_list(data.get("topics"))) if t]
+    clean = lambda value, limit: _clean(value, limit, scrub, sanitize)  # noqa: E731
+    result.topics = [t for t in (clean(t, MAX_TOPIC) for t in _as_list(data.get("topics"))) if t]
     known = [q["question"] for q in questions] + [q["question"] for q in selected or []]
     for item in _as_list(data.get("uncovered_topics")):
-        topic = _clean(item.get("topic") if isinstance(item, dict) else item, MAX_TOPIC, scrub)
+        topic = clean(item.get("topic") if isinstance(item, dict) else item, MAX_TOPIC)
         if not topic or topic in result.uncovered_topics:
             continue
         result.uncovered_topics.append(topic)
-        question = _clean(item.get("question"), MAX_QUESTION, scrub) if isinstance(item, dict) else ""
+        question = clean(item.get("question"), MAX_QUESTION) if isinstance(item, dict) else ""
         if not question or len(result.gap_questions) >= MAX_GAP_QUESTIONS:
             continue
         if any(same_question(question, k, SAME_QUESTION) for k in known):
@@ -156,8 +161,8 @@ def match_topics(model: ChatModel | None, notes: str | None, questions: list[dic
         seen.add(qid)
         result.additions.append({
             "id": qid,
-            "topic": _clean(item.get("topic"), MAX_TOPIC, scrub) or "context",
-            "reason": _clean(item.get("reason"), MAX_REASON, scrub),
+            "topic": clean(item.get("topic"), MAX_TOPIC) or "context",
+            "reason": clean(item.get("reason"), MAX_REASON),
         })
     return result
 

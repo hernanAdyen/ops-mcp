@@ -36,6 +36,10 @@ DOC_RULES_FILE = "adyen-doc-pages.csv"  # in data/graph/: which Adyen doc pages 
 DIAGRAMS_FILE = "diagrams.csv"  # in data/graph/: the owner's curated flow diagrams
 TEXT_SUFFIXES = {".txt", ".md", ".vtt", ".srt", ".csv", ".json", ".eml"}
 MAX_INPUT_BYTES = 600_000
+# The app server takes at most this many characters per piece of material (scope/extract.py's limit),
+# so an oversized file is refused here, with a plain message, instead of by the server.
+MAX_MATERIAL_CHARS = 150_000
+MAX_ERROR_CHARS = 500  # of an app server error relayed into the chat: enough to read, never a payload
 Kind = Literal["transcript", "summary", "notes", "email", "document"]
 
 
@@ -110,7 +114,11 @@ def read_input(folder: Path, name: str) -> str:
         raise FileNotFoundError(f"There's no file named {name} in {folder}.")
     if path.stat().st_size > MAX_INPUT_BYTES:
         raise ValueError(f"{name} is larger than {MAX_INPUT_BYTES // 1000} KB. Split it into smaller files.")
-    return path.read_text(encoding="utf-8-sig", errors="replace")
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if len(text) > MAX_MATERIAL_CHARS:
+        raise ValueError(f"{name} has {len(text):,} characters; a piece of material can have at most "
+                         f"{MAX_MATERIAL_CHARS:,}. Split it into smaller files and pass them together.")
+    return text
 
 
 def pick_csv(folder: Path, file: str | None) -> Path:
@@ -158,7 +166,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         except Exception as exc:
             return unreachable(exc)
         if res.status_code != 200:
-            return f"The app server refused this (HTTP {res.status_code}): {res.text[:4000]}"
+            return f"The app server refused this (HTTP {res.status_code}): {res.text[:MAX_ERROR_CHARS]}"
         data = {**res.json(), **(extra or {})}
         if compact:
             return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -172,7 +180,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         except Exception as exc:
             return unreachable(exc)
         if res.status_code != 200:
-            return f"The app server refused this (HTTP {res.status_code}): {res.text[:4000]}"
+            return f"The app server refused this (HTTP {res.status_code}): {res.text[:MAX_ERROR_CHARS]}"
         data = res.json()
         if data.get("pending"):
             return json.dumps({"pending": True, "job_id": data["job_id"],
@@ -225,7 +233,7 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         except Exception as exc:
             return unreachable(exc)
         if res.status_code != 200:
-            return f"The app server refused the load (HTTP {res.status_code}): {res.text[:2000]}"
+            return f"The app server refused the load (HTTP {res.status_code}): {res.text[:MAX_ERROR_CHARS]}"
         return json.dumps({"file": path.name, **res.json()}, indent=2, ensure_ascii=False)
 
     @server.tool(

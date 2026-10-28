@@ -20,6 +20,17 @@ def test_health_ok():
     assert "secret" not in res.text
 
 
+def test_a_bad_request_never_echoes_the_input():
+    client = TestClient(create_app(SETTINGS, db_check=DB_OK, session_factory=lambda: None, model=None, embedder=None))
+    body = {"sheet_id": "1AbCdEfGhIjK", "tab_sheet_id": 7, "column_count": 3, "row_count": 2, "header_row": ["id", "answer"],
+            "id_column": ["id", "ID-0001"], "columns": {"answer": ["answer", ""]},
+            "material": [{"label": "Transcript", "kind": "transcript", "text": "SECRET-TRANSCRIPT " * 9000}]}
+    res = client.post("/answers/jobs", json=body)
+    assert res.status_code == 422 and "SECRET-TRANSCRIPT" not in res.text
+    [error] = res.json()["detail"]
+    assert error["loc"][-1] == "text" and "150000" in error["msg"].replace(",", "") and set(error) == {"loc", "msg", "type"}
+
+
 def test_health_degraded_when_db_down():
     res = TestClient(create_app(SETTINGS, db_check=DB_DOWN)).get("/health")
     assert res.status_code == 503

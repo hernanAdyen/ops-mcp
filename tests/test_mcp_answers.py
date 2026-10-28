@@ -64,6 +64,14 @@ async def test_pasted_material_and_saved_files_are_sent_together(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_a_file_over_the_material_limit_is_refused_before_anything_is_sent(tmp_path):
+    (tmp_path / "long.txt").write_text("SECRET " * 30_000, encoding="utf-8")  # 210,000 characters
+    received = []
+    text = _tool_text(await server_for(received, tmp_path).call_tool("im_answers_start", {**SHEET, "files": [{"label": "x", "file": "long.txt"}]}))
+    assert "at most 150,000" in text and "SECRET" not in text and received == []
+
+
+@pytest.mark.anyio
 async def test_only_text_files_inside_the_inputs_folder_can_be_read(tmp_path):
     (tmp_path.parent / "outside.txt").write_text("secret", encoding="utf-8")
     (tmp_path / "deck.pdf").write_bytes(b"%PDF")
