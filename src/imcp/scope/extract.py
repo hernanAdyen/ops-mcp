@@ -158,16 +158,39 @@ def question_lines(questions: list[Question], current: dict[str, str] | None = N
 SAME = "same"
 
 
+def _option_patterns(option: str) -> list[re.Pattern]:
+    """Ways an option can be written: the whole option, the words outside its parentheses, and the words inside
+    them (letters only, so 'card on file' finds 'CardOnFile'). 'One-click checkout (CardOnFile)' matches all three."""
+    # not after a negation: 'no subscriptions' doesn't name the Subscriptions option
+    start, end = r"(?<!\w)(?<!no )(?<!not )(?<!never )(?<!without )", r"(?!\w)"
+    patterns = [re.compile(start + re.escape(option.strip()) + end, re.IGNORECASE)]
+    outside = re.sub(r"\(.*?\)", " ", option).strip()
+    if outside and outside != option.strip() and len(outside) >= 6:
+        patterns.append(re.compile(start + re.escape(outside) + end, re.IGNORECASE))
+    for inside in re.findall(r"\(([^)]+)\)", option):
+        letters = re.sub(r"[^A-Za-z0-9]", "", inside)
+        if len(letters) >= 6:
+            # the letters in order, any spacing or case between them: 'card on file', 'card-on-file', 'CardOnFile'
+            spaced = r"[\s_-]*".join(re.escape(ch) for ch in letters)
+            patterns.append(re.compile(start + spaced + end, re.IGNORECASE))
+    return patterns
+
+
 def _match_option(value: str, options: list[str]) -> str | None:
     wanted = value.strip().casefold()
-    return next((o for o in options if o.strip().casefold() == wanted), None)
+    exact = next((o for o in options if o.strip().casefold() == wanted), None)
+    if exact is not None:
+        return exact
+    # one option written by its core words, and nothing else of substance around it
+    found, rest = _options_in(value, options)
+    return found[0] if len(found) == 1 and not rest else None
 
 
 def _other(options: list[str]) -> str | None:
     return next((o for o in options if o.strip().casefold() == "other"), None)
 
 
-FILLER = {"and", "or", "both", "also", "plus"}
+FILLER = {"and", "or", "both", "also", "plus", "a", "an", "the"}
 
 
 def _options_in(text: str, options: list[str]) -> tuple[list[str], list[str]]:
@@ -175,10 +198,13 @@ def _options_in(text: str, options: list[str]) -> tuple[list[str], list[str]]:
     isn't split at its comma), and whatever else is left over."""
     found, rest = [], text
     for option in sorted(options, key=len, reverse=True):
-        pattern = re.compile(r"(?<!\w)" + re.escape(option.strip()) + r"(?!\w)", re.IGNORECASE)
-        if option.strip() and pattern.search(rest):
-            found.append(option)
-            rest = pattern.sub(" ", rest)
+        if not option.strip() or option.strip().casefold() == "other":
+            continue
+        for pattern in _option_patterns(option):
+            if pattern.search(rest):
+                if option not in found:
+                    found.append(option)
+                rest = pattern.sub(" ", rest)
     leftovers = []
     for part in re.split(r"[|;,/]|\band\b|\bor\b", rest, flags=re.IGNORECASE):
         part = part.strip(" .:-()").strip()
@@ -275,7 +301,8 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
         return Extraction(status="unavailable", note="Our model isn't configured (MODEL_BASE_URL, MODEL_NAME).")
     material_text = "\n\n".join(f'### {m.label} ({m.kind})\n"""\n{m.text.strip()}\n"""' for m in materials)
     track_line = (f"This sheet tab is for the project track named {one_line(track, 100)!r}. Use that track's section of "
-                  "the material and the notes that apply to the whole project; ignore other tracks' sections.\n\n"
+                  "the material and the notes that apply to the whole project; ignore other tracks' sections. Notes that "
+                  "sit under no track (general remarks, 'other notes', next steps) apply to this track too.\n\n"
                   if track else "")
     user = (
         track_line

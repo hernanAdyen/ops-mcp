@@ -182,6 +182,14 @@ def test_same_answer_ignores_case_spacing_and_choice_order():
     assert not same_answer("iOS", "iOS | Web")
 
 
+def test_a_shorter_restatement_agrees_but_an_addition_does_not():
+    assert same_answer("United States only for online track", "United States only")
+    assert same_answer("USD", "usd")
+    assert not same_answer("USD", "USD and EUR")  # the finding adds something
+    assert not same_answer("United States only", "United States only for online track")
+    assert not same_answer("FALSE", "TRUE") and not same_answer("TRUE", "TRUE and more") and not same_answer("Ethernet", "net")
+
+
 def test_new_ids_continue_after_the_highest():
     assert new_ids(["ID-0001", "NEW-0002", "", "NEW-0007"], 2) == ["NEW-0008", "NEW-0009"]
     assert new_ids([], 1) == ["NEW-0001"]

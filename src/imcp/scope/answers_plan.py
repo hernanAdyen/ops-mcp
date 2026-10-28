@@ -12,6 +12,7 @@ One exact Sheets batch, as for /ops-create-scope, so no row arithmetic is left t
 Rows are only added at the end and columns only at the right, so nothing the IM has moves.
 """
 
+import re
 from dataclasses import dataclass, field
 
 from imcp.scope.additions import row_from, section_requests
@@ -67,11 +68,17 @@ def _norm(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
-def same_answer(a: str, b: str) -> bool:
-    """Equal ignoring case and spacing; multi-choice answers ('A | B') in any order."""
-    if "|" in a or "|" in b:
-        return {_norm(x) for x in a.split("|") if x.strip()} == {_norm(x) for x in b.split("|") if x.strip()}
-    return _norm(a) == _norm(b)
+def same_answer(current: str, found: str) -> bool:
+    """Equal ignoring case and spacing; multi-choice answers ('A | B') in any order. For free text, a finding
+    that repeats part of the current answer and adds nothing ('United States only' against 'United States only
+    for online track') is an agreement; one that adds words is not, so 'USD and EUR' against 'USD' stays a
+    difference. Direction matters: current first, finding second."""
+    if "|" in current or "|" in found:
+        return {_norm(x) for x in current.split("|") if x.strip()} == {_norm(x) for x in found.split("|") if x.strip()}
+    a, b = _norm(current), _norm(found)
+    if a == b:
+        return True
+    return len(b) >= 3 and b.upper() not in ("TRUE", "FALSE") and re.search(r"(?<!\w)" + re.escape(b) + r"(?!\w)", a) is not None
 
 
 def add_note(old: str, new: str) -> str:

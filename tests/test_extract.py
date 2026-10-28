@@ -190,6 +190,22 @@ def test_a_failed_second_pass_keeps_the_first():
     assert result.prose_pass["status"] == "unavailable" and "second reading" in result.prose_pass["note"]
 
 
+def test_choice_options_are_found_by_their_core_words():
+    from imcp.scope.extract import _match_option, _options_in
+    options = ["One-click checkout (CardOnFile)", "Subscriptions (Subscription)", "Unscheduled charges (UnscheduledCardOnFile)", "None"]
+    found, rest = _options_in("One-click checkout for logged-in customers (card on file); no subscriptions", options)
+    assert found == ["One-click checkout (CardOnFile)"] and rest == ["for logged-in customers", "no subscriptions"]
+    assert _options_in("CardOnFile and subscription", options)[0] == ["One-click checkout (CardOnFile)", "Subscriptions (Subscription)"]
+    assert _options_in("unscheduled card-on-file charges", options)[0] == ["Unscheduled charges (UnscheduledCardOnFile)"]
+    assert _match_option("card on file", options) == "One-click checkout (CardOnFile)"
+    assert _match_option("card on file and more words", options) is None and _match_option("none", options) == "None"
+    systems = ["OMS", "ERP", "PIM", "CRM", "Subscription billing platform", "Other"]
+    assert _options_in("OMS and a CRM, no ERP", systems) == (["OMS", "CRM"], ["no ERP"])  # a negated option isn't chosen
+    assert _options_in("Other: own stack", systems)[0] == []  # 'Other' is never matched as a word
+    capture = ["Immediate capture", "Delayed automatic capture", "Manual capture"]
+    assert _options_in("immediate capture for online orders", capture) == (["Immediate capture"], ["for online orders"])
+
+
 def test_question_lines():
     assert question_lines([SHEET[1]]) == "ID-0037 | toggle | Tipping"
 
