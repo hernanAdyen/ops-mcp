@@ -113,9 +113,10 @@ def test_at_most_eight_new_questions():
 
 
 def test_contact_details_are_scrubbed_when_sanitizing():
-    reply = {"answers": [{"id": "ID-0001", "answer": "US; contact jordan@example.com", "evidence": "call +1 614 555 0100"}]}
+    reply = {"answers": [{"id": "ID-0001", "answer": "US; contact jordan@example.com, IBAN NL91ABNA0417164300",
+                          "evidence": "call +1 614 555 0100, key AQEyhmfxK4LPaBdEw0m-live_abc123XYZ789"}]}
     on, _ = run(reply)
-    assert on.answers[0]["answer"] == "US; contact [email]" and on.answers[0]["evidence"] == "call [phone]"
+    assert on.answers[0]["answer"] == "US; contact [email], IBAN [iban]" and on.answers[0]["evidence"] == "call [phone], key [key]"
     off, _ = run(reply, sanitize=False)
     assert "jordan@example.com" in off.answers[0]["answer"]
 

@@ -54,6 +54,22 @@ def count(session, model):
     return session.scalar(select(func.count()).select_from(model))
 
 
+def test_pages_are_scrubbed_before_they_are_stored_or_embedded(session):
+    page = Page(url="https://docs.adyen.com/online-payments/contact.md", path="/online-payments/contact.md",
+                title="Contact jordan@example.com", description="Call +1 614 555 0100 about IBAN NL91ABNA0417164300",
+                tags={}, rule="/online-payments")
+    embedder = FakeEmbedder()
+    load_assets(session, [page], kind=E.AssetKind.doc_page, embedder=embedder, source_ref="t", apply=True)
+    node = session.scalar(select(Node).where(Node.canonical_key == page.url))
+    assert node.label == "Contact [email]" and node.description == "Call [phone] about IBAN [iban]"
+    assert "jordan" not in embedder.calls[0][0] and session.scalar(select(Asset).where(Asset.url == page.url)).title == "Contact [email]"
+    # off, the page is stored as given
+    other = Page(url="https://docs.adyen.com/online-payments/raw.md", path="/online-payments/raw.md",
+                 title="Raw jordan@example.com", description="", tags={}, rule="/online-payments")
+    load_assets(session, [page, other], kind=E.AssetKind.doc_page, embedder=embedder, source_ref="t", apply=True, sanitize=False)
+    assert session.scalar(select(Node).where(Node.canonical_key == other.url)).label == "Raw jordan@example.com"
+
+
 def test_dry_run_reports_and_writes_nothing(session):
     embedder = FakeEmbedder()
     report = load(session, embedder, apply=False)

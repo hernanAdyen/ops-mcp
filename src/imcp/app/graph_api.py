@@ -63,7 +63,8 @@ def load_diagram_rows(req: DiagramsLoadRequest, request: Request, wait: float = 
         if req.apply and app.state.embedder is None:
             raise RunError(422, "EMBEDDING_MODEL (and MODEL_BASE_URL or EMBEDDING_BASE_URL) must be set to load.")
         try:
-            return load_diagrams(session, app.state.embedder, csv_text=req.csv, source_ref=req.source_ref, apply=req.apply)
+            return load_diagrams(session, app.state.embedder, csv_text=req.csv, source_ref=req.source_ref, apply=req.apply,
+                                 sanitize=app.state.settings.FLAG_SANITIZE)
         except RulesError as exc:
             raise RunError(422, f"The diagrams file can't be used: {exc}") from exc
 

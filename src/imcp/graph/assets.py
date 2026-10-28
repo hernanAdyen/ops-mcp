@@ -6,6 +6,8 @@ with apply=True it makes the changes, embeds what is new or changed, and records
 
 An asset node keeps only what points at the asset: its URL (the canonical key), title (label),
 one-line description, tags (in attrs) and the embedding of title + description. Never the content.
+With sanitize on (the default), the title and description are scrubbed of personal and secret data
+(imcp.pii) before anything is stored or embedded: the one gate every page passes through.
 
 Rules:
   new URL                     node + asset inserted (status active) and embedded
@@ -16,7 +18,7 @@ Rules:
   deprecated URL is back      restored (active) and embedded if needed
 """
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -26,6 +28,7 @@ from imcp.db import enums as E
 from imcp.db.models import Asset, IngestionRun, Node
 from imcp.graph.docs_index import Page
 from imcp.llm import ModelError
+from imcp.pii import scrub
 
 LIST_CAP = 40  # the report lists at most this many URLs per change, with the totals in counts
 
@@ -67,9 +70,11 @@ def _attrs(page: Page) -> dict:
 
 
 def load_assets(session: Session, pages: list[Page], *, kind: E.AssetKind, embedder, source_ref: str | None,
-                apply: bool, no_description: list[str] | None = None) -> AssetLoadReport:
+                apply: bool, no_description: list[str] | None = None, sanitize: bool = True) -> AssetLoadReport:
     report = AssetLoadReport(applied=apply, source=source_ref, kind=kind.value,
                              no_description=list(no_description or []))
+    if sanitize:
+        pages = [replace(pg, title=scrub(pg.title), description=scrub(pg.description or "")) for pg in pages]
     for p in pages:
         report.by_section[_section(p.path)] = report.by_section.get(_section(p.path), 0) + 1
 

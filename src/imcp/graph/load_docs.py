@@ -48,7 +48,8 @@ def load_doc_pages(session, settings: AppSettings, embedder, *, rules_csv: str, 
     if not selection.pages:
         raise RunError(422, "No page in the index matched the rules. Check the rules file and the index URL.")
     report = load_assets(session, selection.pages, kind=E.AssetKind.doc_page, embedder=embedder,
-                         source_ref=source_ref, apply=apply, no_description=selection.no_description)
+                         source_ref=source_ref, apply=apply, no_description=selection.no_description,
+                         sanitize=settings.FLAG_SANITIZE)
     report.counts["excluded_by_rules"] = selection.excluded
     report.counts["index_entries"] = selection.excluded + selection.duplicates + len(selection.pages) + len(selection.no_description)
     return report

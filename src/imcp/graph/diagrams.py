@@ -53,7 +53,8 @@ def parse_diagrams_csv(text: str) -> list[Page]:
     return pages
 
 
-def load_diagrams(session, embedder, *, csv_text: str, source_ref: str | None, apply: bool) -> AssetLoadReport:
+def load_diagrams(session, embedder, *, csv_text: str, source_ref: str | None, apply: bool,
+                  sanitize: bool = True) -> AssetLoadReport:
     pages = parse_diagrams_csv(csv_text)
     return load_assets(session, pages, kind=E.AssetKind.flow_diagram, embedder=embedder,
-                       source_ref=source_ref, apply=apply)
+                       source_ref=source_ref, apply=apply, sanitize=sanitize)

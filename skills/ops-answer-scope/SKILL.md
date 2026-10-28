@@ -44,9 +44,11 @@ server, tell the IM to check that `docker compose up` is running, and stop.
     can see which meeting each answer came from. Leave it out only if the IM doesn't know.
   - A Google Doc: read it with the Drive connector and pass its text. An attachment: read its text and
     pass that.
-  - Long material (more than about 20,000 characters, such as a full call transcript): suggest the IM
-    saves it as a .txt or .md file in the IM MCP's `inputs/` folder, then pass it as `files` instead of
-    pasting it into the tool call. `im_inputs_list` shows what is there.
+  - Anything from Gong (a transcript or an AI call summary), and any material longer than about
+    20,000 characters: ask the IM to save it as a .txt or .md file in the IM MCP's `inputs/` folder and
+    pass it as `files` instead of pasting it. A file goes straight from the IM's machine to the IM MCP
+    server; pasted text passes through this chat first. `im_inputs_list` shows what is there. Short
+    notes and emails can be pasted.
   - The material goes to the IM MCP server and our model for this run only and is never stored. Don't
     write it anywhere else.
 

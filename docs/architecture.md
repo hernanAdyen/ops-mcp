@@ -65,7 +65,11 @@ These are deliberate. Changing one is a design decision to discuss first, not a 
    and answer extraction run on our model so Claude doesn't have to hold the whole bank. Everything it
    returns is checked: unknown IDs are dropped, answers are put in the question's format, new questions
    that repeat a bank question are dropped.
-5. **Privacy by default.** Merchant material and the answers found are never stored or logged. A run's
+5. **Privacy by default.** Merchant material and the answers found are never stored or logged. What our
+   model found is scrubbed of email addresses, phone numbers, IBANs, card numbers and keys (`imcp.pii`,
+   behind `FLAG_SANITIZE`) before it goes back to the chat and the sheet, and so is every page's title
+   and description before it enters the graph. The skill sends Gong output as a file in `inputs/`, the
+   one route that bypasses the chat model. A run's
    trace keeps question IDs, counts and hashes. The IM's notes are sent to the model but never stored.
    Call transcripts (material of kind `transcript`) are accepted only while `FLAG_TRANSCRIPTS` is on (the
    default); off, `/ops-answer-scope` refuses them and asks for a summary or notes.
@@ -218,7 +222,8 @@ on. With one track the headings read "Project".
 | `src/imcp/scope/additions.py` | The Suggested additions section, shared by both commands |
 | `src/imcp/scope/queue.py` | The review queue for new questions, and reading back what the IM did |
 | `src/imcp/scope/call_prompt.py` | The call-notes prompt |
-| `src/imcp/scope/text.py` | Text helpers: trimming, scrubbing, comparing questions |
+| `src/imcp/pii.py` | The scrub shared by the scope commands and the graph loaders: emails, phones, IBANs, Luhn-valid card numbers, keys; the merchant's name |
+| `src/imcp/scope/text.py` | Text helpers: trimming, comparing questions (the scrub is re-exported from `pii.py`) |
 | `skills/` | The commands, as skills |
 | `evals/` | Fictional cases with known right answers and the runner that scores our model against them through the app server |
 | `tests/` | Tests. `tests/db/` need the Postgres test database. `fakes.py` has `FakeModel` and `FakeEmbedder`; `fake_doc.py` plays a Docs batch on an index model, like `FakeTab` for Sheets |
