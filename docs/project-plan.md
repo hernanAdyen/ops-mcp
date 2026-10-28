@@ -246,7 +246,27 @@ takes the sheet's unanswered questions and the material's prose paragraphs only 
 those questions the prose answers. Built the same day (`_prose_pass` in `extract.py`, skipped when the
 material has fewer than two lines that aren't ID answers; a failure keeps the first pass; counts in the
 trace under `prose_pass`). The FR tab's offline-processing remark (ID-0070) is a third instance of the
-same miss. Numbers after the rebuild: below.
+same miss.
+
+With the second pass, three runs each (2026-10-27, gpt-4.1-mini):
+
+| Case | Before the day | With the second pass |
+|---|---|---|
+| `slice-street-pizza` US | 17/18 | 15, 17, 17 of 18 |
+| `slice-street-pizza` FR | 19/20 | 19, 18, 18 of 20 |
+| `slice-street-follow-up` | 13/16 (two false conflicts) | 15, 15, 15 of 16 |
+
+What the second pass fixed: the follow-up's prose remarks (custom UI, expired cards) are found every
+run, the US token-migration remark now and then, the FR offline-processing remark once in three; the
+false "USD only" conflict is gone. What it cost at first: FALSE on toggles the call never mentioned,
+fixed by letting a toggle from prose be TRUE only. What is left: ID-0077 on US comes back as a sentence
+instead of the CardOnFile option in every run (a first-pass formatting wobble that started with the
+`same` rule's line in the prompt and survived its rewording), ID-0098 once in three, FR loyalty
+(ID-0072) every run, and the follow-up's regions restatement ("US only" against "United States only for
+online track") read as a conflict every run. Next for the extraction, when it comes up again: a
+multi_choice answer that matches no option could be matched against the options by meaning in a tiny
+follow-up call, and the `same` rule could show the model the current answer again at the point of
+answering; both are measured by these two cases.
 
 ## Backlog
 
