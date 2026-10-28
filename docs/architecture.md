@@ -67,6 +67,8 @@ These are deliberate. Changing one is a design decision to discuss first, not a 
    that repeat a bank question are dropped.
 5. **Privacy by default.** Merchant material and the answers found are never stored or logged. A run's
    trace keeps question IDs, counts and hashes. The IM's notes are sent to the model but never stored.
+   Call transcripts (material of kind `transcript`) are accepted only while `FLAG_TRANSCRIPTS` is on (the
+   default); off, `/ops-answer-scope` refuses them and asks for a summary or notes.
    The review queue gets only the generic wording of new questions, behind `FLAG_CANDIDATE_QUEUE` and
    the IM's consent.
 6. **The master bank belongs to people.** Only a person edits it. It is loaded from a CSV download with

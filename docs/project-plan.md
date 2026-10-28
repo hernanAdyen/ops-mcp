@@ -23,6 +23,7 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/ops-cre
 | 7 | `/ops-create-solution` | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left. Several tracks (one block each, built from the `{{Track}}` template) run twice on the Domino's test sheet (US + FR) the same day: 230 requests, clean document. End-to-end pass on a fresh two-track sheet (Slice Street Pizza, US online + FR in-store) 2026-10-27: scope, answers, proposal (201 requests), each track's Discovery table carries its own answers only |
 | 8 | Bank columns `purpose`, `baseline`, `status` (2026-10-27) | From the comparison with the coworker's Solution_Proposal_MCP: `purpose` goes into the extraction and topic-matching prompts; `baseline` questions join every scope within the IM's priorities and sections (`found_by` "baseline"); `status` `retired` deactivates a row in place. Migration 0006. `python -m imcp.bank.draft` drafts the two columns with our model into a CSV for the owner; the master stays theirs. Loaded as bank v4 the same day: 144 questions with a purpose, 7 baseline (background, goals, regions, payment methods, currencies, sales channels, user platforms); the model also offered submerchant count and websites, left out as platform- and online-only Tags from their 66-entry dictionary and the alias pre-pass were left out on purpose (the model's topic matching covers it; revisit if an eval shows keyword misses) |
 | 9 | Scope over meetings (2026-10-27) | `/ops-answer-scope` after each call: a `date` per piece of material goes into `source` ("Call summary, 2026-10-24"); a finding that agrees with the IM's own answer sets `confirmed`, a different one sets `conflict` with the finding in `ai_note` (resolved in the sheet, no supersede flag); a Scope log tab, added on the first run and appended with `appendCells`, holds one line per change (time, track, question, change, answer, source, confidence, note); material already used on a tab (hash in a recorded run) is skipped, or refused when nothing else is passed; the proposal uses a `conflict` answer as it stands, flagged. From the coworker's design, without their Meetings tab and speaker roles |
+| 10 | Transcript flag (2026-10-27) | `FLAG_TRANSCRIPTS`, on by default, shown in the health flags; off, `/ops-answer-scope` refuses material of kind `transcript` before anything reaches our model and asks for a summary or notes. Gong is cleared with Privacy; the flag is the switch the owner asked for |
 | 6 | Embeddings and the doc page loader | `EmbeddingClient` (OpenAI-compatible `/embeddings`, called by the server with its own key; `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` fall back to the chat model's); `node.embedding` takes any size (migration 0005), each node records its model, no normalising, cosine distance, exact search; `im_graph_load_docs` reads the Adyen docs index (`DOCS_INDEX_URL`, `llms.txt`) and the rules file `data/graph/adyen-doc-pages.csv` (about 950 of 1,300 non-payment-method pages) and loads one asset node per page: link, title, one-line description, tags, embedding, never the content; dry run then apply, deprecate not delete, `ingestion_run` recorded; `nearest_assets` search. Not yet run against the live index with a real embedding model |
 
 ## Next
@@ -31,8 +32,7 @@ Agreed with the coworker's implementation in view (2026-10-27): one question ban
 Docker setup stays until the backend is hosted; Gong material is fine (cleared) but behind a flag; the
 scope lives across meetings; the diagram registry is decided later. In order:
 
-1. **Transcript flag:** a setting, on by default, that refuses material of kind `transcript` when off.
-2. **PII scrub**, one module with three callers: the answers result on its way back to the chat
+1. **PII scrub**, one module with three callers: the answers result on its way back to the chat
    (answers, evidence, ai_note, new-question text), the graph's asset loader (`assets.py`, before any
    page is chunked, embedded or stored; names need the model, later, when reference proposals are
    ingested) and the skill steering anything from Gong to the `inputs/` file route, which is the only
@@ -40,15 +40,15 @@ scope lives across meetings; the diagram registry is decided later. In order:
 
 Then, as before:
 
-3. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
+2. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
    SVG). Loader built and run with one stand-in.
-4. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
+3. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
    considerations and their edges come from real proposals and the tool improves as more are added.
-5. **Evals:** a second extraction case for the two prose misses (token migration, loyalty) and for the
+4. **Evals:** a second extraction case for the two prose misses (token migration, loyalty) and for the
    spurious NEW- question seen on the end-to-end pass (below); leave-one-out on the reference proposals.
-6. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
+5. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
    the reconciliation page). Load the missing docs sections or let the server fetch a title.
-7. **Master fixes, by the owner:** the 2.2.1 Discovery table header still reads "Question | In Scope"
+6. **Master fixes, by the owner:** the 2.2.1 Discovery table header still reads "Question | In Scope"
    (the plan requires "Answer"), and the empty paragraph before the "3.0 Solution" title table still
    carries direct formatting (15 pt, grey), which a further track's Discovery table inherits. Both were
    patched by hand in the copy on every run so far.

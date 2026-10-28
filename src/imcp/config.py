@@ -55,6 +55,9 @@ class AppSettings(_Base):
     FLAG_SANITIZE: bool = True
     # Send new questions (generic wording, no answers or material) to our review queue
     FLAG_CANDIDATE_QUEUE: bool = False
+    # Accept call transcripts (material of kind `transcript`) in /ops-answer-scope. Off: the run refuses
+    # them and asks for a call summary or notes instead. Summaries, notes, emails and documents always pass.
+    FLAG_TRANSCRIPTS: bool = True
 
     @model_validator(mode="after")
     def _database_configured(self) -> "AppSettings":
@@ -114,5 +117,6 @@ def describe_config(s: AppSettings) -> dict:
             "recommender": s.FLAG_RECOMMENDER,
             "sanitize": s.FLAG_SANITIZE,
             "candidateQueue": s.FLAG_CANDIDATE_QUEUE,
+            "transcripts": s.FLAG_TRANSCRIPTS,
         },
     }

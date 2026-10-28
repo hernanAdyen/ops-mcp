@@ -30,6 +30,8 @@ def test_defaults():
     assert s.FLAG_RECOMMENDER == "curated"
     assert s.FLAG_SANITIZE is True
     assert s.FLAG_CANDIDATE_QUEUE is False
+    assert s.FLAG_TRANSCRIPTS is True
+    assert describe_config(s)["flags"]["transcripts"] is True
 
 
 def test_database_url_override_gets_psycopg_driver():

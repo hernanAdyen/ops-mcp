@@ -176,6 +176,12 @@ def start_answers(session: Session, settings: AppSettings, model, req: AnswersSt
     im_review = observe_im_review(session, opp.opportunity_id, sheet_new, merchant_name) \
         if opp is not None and settings.FLAG_CANDIDATE_QUEUE else {}
 
+    transcripts = [m.label.strip() for m in req.material if m.kind == "transcript"]
+    if transcripts and not settings.FLAG_TRANSCRIPTS:
+        raise RunError(422, "Call transcripts are switched off on this server (FLAG_TRANSCRIPTS), so this material "
+                            f"can't be used: {', '.join(transcripts)}. Pass a call summary or notes instead. "
+                            "Nothing was written.")
+
     earlier = _earlier_runs(session, req.sheet_id, req.tab_sheet_id)
     used = _already_used(earlier)
     repeats = [m for m in req.material if sha256(m.text) in used]

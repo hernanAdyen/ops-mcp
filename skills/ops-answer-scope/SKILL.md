@@ -78,7 +78,9 @@ until you get the result. Never call `im_answers_start` twice for the same tab a
 refuses because something was passed wrongly, fix that and call again. If it refuses because the
 material was already used on this tab, tell the IM in one line (which pieces, and when) and stop:
 nothing was written. The summary's `already_used` lists pieces it skipped for that reason while using
-the rest. If our model is unavailable, tell the IM in one line and stop: nothing was written.
+the rest. If it refuses a transcript (transcripts are switched off on the server), tell the IM in one
+line and ask for a call summary or notes instead: nothing was written. If our model is unavailable,
+tell the IM in one line and stop: nothing was written.
 
 ## 4. Write to the tab
 

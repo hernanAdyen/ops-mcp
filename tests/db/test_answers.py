@@ -228,6 +228,21 @@ def test_material_already_used_on_the_tab_is_skipped_or_refused(session):
     assert trace["already_used"] == 1 and len(trace["material"]) == 1
 
 
+def test_transcripts_are_refused_when_the_flag_is_off(session):
+    tab, _ = scope_sheet(session)
+    off = SETTINGS.model_copy(update={"FLAG_TRANSCRIPTS": False})
+    model = FakeModel(REPLY)
+    with pytest.raises(RunError) as err:
+        start_answers(session, off, model, start_request(tab, material=[
+            {"label": "Call summary", "kind": "summary", "text": "a summary"},
+            {"label": "Call 1 transcript", "kind": "transcript", "text": "SECRET-TRANSCRIPT"}]))
+    assert err.value.status == 422 and "Call 1 transcript" in err.value.detail["error"]
+    assert "Nothing was written" in err.value.detail["error"] and model.calls == []
+    assert session.scalars(select(Generation).where(Generation.command == "ops-answer-scope")).all() == []
+    out = start_answers(session, off, model, start_request(tab))  # a summary still runs
+    assert out["summary"]["filled"] == 2
+
+
 def test_removed_new_questions_are_noted(session):
     tab, _ = scope_sheet(session)
     run_answers(session, tab, settings=QUEUE_ON)
