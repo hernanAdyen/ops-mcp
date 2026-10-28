@@ -97,3 +97,5 @@ def test_unparseable_reply_is_unavailable():
 def test_question_lines_are_one_line_each():
     text = question_lines([{**QUESTIONS[0], "question": "Line one\nline two"}])
     assert text == "ID-0057 | P3 | Discovery | Line one line two | ECOM, IPP · PAYIN"
+    with_purpose = question_lines([{**QUESTIONS[1], "purpose": "Decides the 3DS\nsetup."}])
+    assert with_purpose == "ID-0061 | P3 | Features & Functionality | Is 3DS in scope? | no tags | purpose: Decides the 3DS setup."

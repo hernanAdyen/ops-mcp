@@ -196,9 +196,10 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
         description=(
             "Loads the master question bank into the IM MCP database from a CSV download of the bank's "
             "Project Scope tab, saved in the repo's data/ folder (no other files can be read). "
-            "By default this is a dry run: it reports new, changed, deactivated and invalid questions and "
-            "changes nothing. Always show the dry-run report to the user, and only call again with "
-            "apply=true after they explicitly confirm. If file is not given, the newest .csv in data/ is used."
+            "By default this is a dry run: it reports new, changed, deactivated (missing or marked retired), "
+            "retired and invalid questions and changes nothing. Always show the dry-run report to the user, "
+            "and only call again with apply=true after they explicitly confirm. If file is not given, the "
+            "newest .csv in data/ is used."
         ),
     )
     async def im_bank_load(file: str | None = None, apply: bool = False) -> str:
@@ -227,7 +228,8 @@ def build_server(settings: McpSettings | None = None, client: httpx.AsyncClient 
             "Starts a /ops-create-scope run. A scope has one or more project tracks (e.g. 'Ecommerce US' and "
             "'In-person payments UK'), each with its own tags and its own tab in the sheet. For one track, pass "
             "the tags directly; for several, pass `tracks` (name + tags each) and leave the tags empty. The server "
-            "selects the bank questions that match each track's tags and, if the IM gave context, our model adds "
+            "selects the bank questions that match each track's tags, adds the bank's baseline questions (in "
+            "every scope, whatever the tags) and, if the IM gave context, our model adds "
             "questions on topics the context mentions, per track. Pass the IM's context as they wrote it; it is "
             "used for matching and never stored. An empty list for a tag means all values; a question with no "
             "value for a tag applies to everyone; priorities and subsections limit everything. Returns a draft_id, "

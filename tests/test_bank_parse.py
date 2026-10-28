@@ -23,6 +23,14 @@ def row(qid="ID-0001", enum="toggle", options="", question="Is 3DS in scope?", n
     return [qid, enum, options, question, notes, answer, priority, subsection, channels, pillars, category, platform]
 
 
+# The master with the optional columns added (2026-10-27): purpose, baseline, status
+HEADER_V4 = HEADER + ["purpose", "baseline", "status"]
+
+
+def row4(purpose="", baseline="", status="", **kw):
+    return row(**kw) + [purpose, baseline, status]
+
+
 def test_valid_row():
     result = parse_bank_csv(make_csv(row()))
     assert result.fatal is None and result.invalid == []
@@ -69,6 +77,37 @@ def test_values_are_normalised():
     assert q.type == E.QuestionType.toggle and q.text == "Is 3DS in scope?"
     assert q.channels == [E.Channel.ECOM, E.Channel.IPP]  # deduplicated, fixed order
     assert q.pillars == [E.Pillar.DIGITAL, E.Pillar.UC]
+
+
+def test_optional_columns_default_when_missing():
+    q = parse_bank_csv(make_csv(row())).rows[0]
+    assert q.purpose is None and q.baseline is False and q.retired is False
+
+
+def test_purpose_baseline_and_status():
+    text = make_csv(row4(purpose="Sets the regions\nthe integration supports.  ", baseline="y", status="Active"),
+                    row4(qid="ID-0002", baseline="N", status="retired"),
+                    row4(qid="ID-0003", baseline="TRUE", status=""),
+                    header=HEADER_V4)
+    one, two, three = parse_bank_csv(text).rows
+    assert one.purpose == "Sets the regions the integration supports." and one.baseline and not one.retired
+    assert two.purpose is None and not two.baseline and two.retired
+    assert three.baseline and not three.retired
+    assert one.content()["purpose"] == one.purpose and one.content()["baseline"] is True
+    assert "retired" not in one.content()  # status isn't content
+
+
+def test_bad_baseline_status_and_long_purpose_are_reported():
+    text = make_csv(row4(baseline="maybe", status="gone", purpose="x" * 301), header=HEADER_V4)
+    [problem] = parse_bank_csv(text).invalid
+    assert problem.problems == ["purpose is 301 characters; keep it to one line of at most 300",
+                                "baseline 'maybe' should be Y or N (or empty)",
+                                "status 'gone' should be empty, active or retired"]
+
+
+def test_what_it_accomplishes_is_the_purpose_column():
+    text = make_csv(row() + ["Decides the capture flow."], header=HEADER + ["What it accomplishes"])
+    assert parse_bank_csv(text).rows[0].purpose == "Decides the capture flow."
 
 
 def test_multiline_text_and_bom():

@@ -71,7 +71,9 @@ These are deliberate. Changing one is a design decision to discuss first, not a 
    the IM's consent.
 6. **The master bank belongs to people.** Only a person edits it. It is loaded from a CSV download with
    a dry run first. Question IDs are permanent: never reused, never renumbered. Questions are
-   deactivated, not deleted.
+   deactivated, not deleted: a row that leaves the master, or whose `status` says `retired`, is
+   deactivated and keeps its history. Columns our model drafts (`purpose`, `baseline`) go to a CSV for
+   the owner to review and paste in; nothing writes to the master.
 7. **The IM owns their sheet.** We only add: fill empty answers, add review columns, add rows at the
    end. We never overwrite the IM's answers; a different finding goes in a note. The IM reviews in the
    sheet, and the next run reads what they changed.
@@ -112,8 +114,10 @@ block of sections per track.
 1. The skill asks the IM for the merchant, the tracks (one short message; "one" is the usual answer),
    tags (one question card per track: channels, pillars, categories) and notes.
 2. `im_scope_start` (a job: `im_scope_wait` until it's done): per track, the server selects questions
-   by tags; our model adds questions for topics in the notes, told which track it is choosing for, and
-   drafts a question for each topic the bank doesn't cover (once, for the project). A draft run is saved.
+   by tags and adds the bank's baseline questions (in every scope, whatever the tags, within the
+   priorities and sections asked for); our model adds questions for topics in the notes, told which
+   track it is choosing for, and drafts a question for each topic the bank doesn't cover (once, for the
+   project). A draft run is saved.
 3. The skill copies the master bank into the IM's `SolutionProposals` folder and reads column A, the
    header row, the filter and every tab's sheetId.
 4. `im_scope_sheet_plan`: the server returns one batch that renames Project Scope to the first track,
@@ -181,7 +185,7 @@ on. With one track the headings read "Project".
 | `src/imcp/app/main.py` | The FastAPI app: routers, `/health`, the job store |
 | `src/imcp/app/*_api.py` | HTTP endpoints, one router per command. No logic beyond calling `scope/` |
 | `src/imcp/app/jobs.py` | Jobs for slow work, kept in memory |
-| `src/imcp/bank/` | Parsing and loading the master bank CSV (dry run, apply, history) |
+| `src/imcp/bank/` | Parsing and loading the master bank CSV (dry run, apply, history); `draft.py` asks our model for a `purpose` and `baseline` per question and prints a CSV for the owner (`python -m imcp.bank.draft` in the app container) |
 | `src/imcp/graph/docs_index.py` | Pure: parses the Adyen docs index (`llms.txt`) and the rules CSV (`data/graph/adyen-doc-pages.csv`, longest prefix wins) into the pages to load, with tags |
 | `src/imcp/graph/assets.py` | Loads asset nodes (doc pages now, diagrams next): dry run or apply, embeds new and changed, deprecates what dropped out, records an `ingestion_run` |
 | `src/imcp/graph/load_docs.py` | One doc page load: fetch the index from `DOCS_INDEX_URL`, apply the rules, load. The index is never stored |
@@ -215,7 +219,7 @@ on. With one track the headings read "Project".
 
 | Table | Holds |
 |---|---|
-| `question`, `question_history`, `bank_load_run` | The loaded master bank, earlier versions of each question, and each load |
+| `question`, `question_history`, `bank_load_run` | The loaded master bank (with `purpose` and `baseline` since migration 0006), earlier versions of each question, and each load |
 | `merchant`, `opportunity` | One deal per scope sheet (the sheet's ID is the opportunity's alias) |
 | `generation` | One row per command run, with its trace and stage (draft, planned, recorded) |
 | `source`, `instance`, `ingestion_run` | The review queue: a pointer to where a new question came from (never the material), the question and its review state |

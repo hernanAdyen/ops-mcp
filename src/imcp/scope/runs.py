@@ -32,7 +32,8 @@ from imcp.db.models import Generation, Merchant, Opportunity, Question
 from imcp.bank.parse import ID_PATTERN
 from imcp.scope.additions import NEW_ID, new_cells, new_ids
 from imcp.scope.call_prompt import call_prompt
-from imcp.scope.candidates import SUBSECTION_LABELS, Tags, bank_status, brief, counts, in_range, tag_matches
+from imcp.scope.candidates import (SUBSECTION_LABELS, Tags, bank_status, baseline_questions, brief, counts, in_range,
+                                   tag_matches)
 from imcp.scope.queue import add_candidates, sha256
 from imcp.scope.sheet_plan import (CALL_PROMPT_TAB, RowInfo, SheetPlanError, TrackEdit, new_sheet_ids, out_of_order,
                                    plan_call_prompt_tab, plan_tracks)
@@ -40,7 +41,7 @@ from imcp.scope.text import same_question
 from imcp.scope.topics import match_topics
 
 COMMAND = "ops-create-scope"
-FOUND_TAGS, FOUND_IM = "tags", "added by you"
+FOUND_TAGS, FOUND_BASELINE, FOUND_IM = "tags", "baseline", "added by you"
 DEFAULT_TRACK = "Project Scope"  # the master's tab name: a scope with one track keeps it
 MAX_TRACKS = 6
 BAD_TAB_CHARS = re.compile(r"[\[\]*?:/\\]")  # Sheets doesn't allow these in a tab title
@@ -190,19 +191,26 @@ def start_run(session: Session, settings: AppSettings, model, req: StartRequest)
     trace_tracks, out_tracks, gap_items = [], [], []
     for index, track in enumerate(tracks):
         matches = tag_matches(session, track.tags)
+        baseline = baseline_questions(session, track.tags)
         in_reach = in_range(session, track.tags)
         if index > 0:  # one introduction per proposal: its questions go in the first tab only
             matches = [q for q in matches if E.Subsection(q.subsection) is not E.Subsection.introduction]
+            baseline = [q for q in baseline if E.Subsection(q.subsection) is not E.Subsection.introduction]
             in_reach = [q for q in in_reach if E.Subsection(q.subsection) is not E.Subsection.introduction]
         matched = {q.question_id for q in matches}
-        rest = {q.question_id: q for q in in_reach if q.question_id not in matched}
+        # Baseline questions are in every scope; the ones the tags didn't select are listed as such
+        baseline_only = [q for q in baseline if q.question_id not in matched]
+        selected = matches + baseline_only
+        chosen = matched | {q.question_id for q in baseline_only}
+        rest = {q.question_id: q for q in in_reach if q.question_id not in chosen}
         topics = match_topics(model, req.context, [brief(q) for q in rest.values()], req.merchant_name,
-                              selected=[brief(q) for q in matches], track=_track_line(track) if several else None)
+                              selected=[brief(q) for q in selected], track=_track_line(track) if several else None)
         trace_tracks.append({
             "name": track.name,
             "tags": track.tags.summary(),
             "tags_input": track.tags.model_dump(mode="json"),
             "tag_matches": sorted(matched),
+            "baseline": sorted(q.question_id for q in baseline_only),
             "topic_matching": topics.to_dict(),
         })
         additions = []
@@ -214,9 +222,10 @@ def start_run(session: Session, settings: AppSettings, model, req: StartRequest)
             "name": track.name,
             "tags_used": track.tags.summary(),
             "tag_matches": counts(matches),
+            "baseline": counts(baseline_only),  # in every scope whatever the tags; those the tags didn't select
             "topic_matching": {"status": topics.status, "note": topics.note, "topics": topics.topics,
                                "uncovered_topics": topics.uncovered_topics, "additions": additions},
-            "total_questions": len(matches) + len(additions),
+            "total_questions": len(selected) + len(additions),
         })
         # Topics no bank question covers are about the project, not one track: one drafted question each
         for g in topics.gap_questions:
@@ -276,6 +285,8 @@ def plan_run(session: Session, run_id: str, req: PlanRequest) -> dict:
     for index, track in enumerate(tracks):
         remove_ids, add_ids = changes[track["name"]]
         selection: dict[str, str] = {qid: FOUND_TAGS for qid in track["tag_matches"]}
+        for qid in track.get("baseline", []):  # runs recorded before the column have none
+            selection.setdefault(qid, FOUND_BASELINE)
         for a in track["topic_matching"]["additions"]:
             selection.setdefault(a["id"], f"topic: {a['topic']}")
         removed = [qid for qid in dict.fromkeys(remove_ids)

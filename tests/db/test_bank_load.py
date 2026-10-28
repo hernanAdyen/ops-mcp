@@ -8,7 +8,7 @@ from imcp.config import AppSettings
 from imcp.db import enums as E
 from imcp.db.models import BankLoadRun, Question, QuestionHistory
 from tests.db.conftest import session_on
-from tests.test_bank_parse import make_csv, row
+from tests.test_bank_parse import HEADER_V4, make_csv, row, row4
 
 BANK = make_csv(
     row(qid="ID-0001", question="What regions are in scope?", enum="free_text"),
@@ -84,6 +84,47 @@ def test_missing_ids_are_deactivated_and_come_back(session):
     assert report.reactivated == ["ID-0003"] and report.counts["active_after"] == 3
     assert session.get(Question, "ID-0003").status == E.QuestionStatus.active
     assert [h.new["status"] for h in history(session, "ID-0003")] == ["deactivated", "active"]
+
+
+def test_purpose_and_baseline_are_stored_and_a_change_is_in_history(session):
+    load(session)
+    with_columns = make_csv(
+        row4(qid="ID-0001", question="What regions are in scope?", enum="free_text",
+             purpose="Sets the regions the integration must support.", baseline="Y"),
+        row4(qid="ID-0002", enum="multi_choice", options="iOS | Android | Web", question="User platforms",
+             notes="Ask per app"),
+        row4(qid="ID-0003", question="Is 3DS in scope?"),
+        header=HEADER_V4,
+    )
+    report = load(session, with_columns)
+    assert report.changed == [{"id": "ID-0001", "fields": ["purpose", "baseline"]}]
+    assert report.counts["baseline"] == 1 and report.counts["unchanged"] == 2
+    q = session.get(Question, "ID-0001")
+    assert q.purpose == "Sets the regions the integration must support." and q.baseline is True
+    [h] = history(session, "ID-0001")
+    assert (h.old["baseline"], h.new["baseline"]) == (False, True) and h.old["purpose"] is None
+    assert load(session, with_columns).counts["unchanged"] == 3  # same again: nothing changes
+
+
+def test_a_retired_row_is_deactivated_in_place_and_comes_back_when_cleared(session):
+    load(session)
+    retired = make_csv(
+        row4(qid="ID-0001", question="What regions are in scope?", enum="free_text"),
+        row4(qid="ID-0002", enum="multi_choice", options="iOS | Android | Web", question="User platforms",
+             notes="Ask per app"),
+        row4(qid="ID-0003", question="Is 3DS in scope?", status="retired"),
+        row4(qid="ID-0004", question="Never loaded", status="retired"),  # a new ID marked retired isn't loaded
+        header=HEADER_V4,
+    )
+    report = load(session, retired)
+    assert report.retired == ["ID-0003", "ID-0004"] and report.deactivated == ["ID-0003"] and report.new == []
+    assert report.counts["retired"] == 2 and report.counts["active_after"] == 2
+    assert session.get(Question, "ID-0003").status == E.QuestionStatus.deactivated
+    assert session.get(Question, "ID-0004") is None
+    report = load(session, retired)  # still retired: nothing more happens
+    assert report.deactivated == [] and report.retired == ["ID-0003", "ID-0004"]
+    report = load(session)  # the status is cleared (the plain bank has no status column)
+    assert report.reactivated == ["ID-0003"] and session.get(Question, "ID-0003").status == E.QuestionStatus.active
 
 
 def test_invalid_rows_are_skipped_and_loaded_questions_keep_their_last_good_version(session):

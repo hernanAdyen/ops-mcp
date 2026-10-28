@@ -2,8 +2,9 @@
 
 Tag rule: any match within a tag, all chosen tags must match, and a question with no value for a
 tag applies to everyone. A tag the IM leaves empty isn't used.
+Baseline questions (the bank's `baseline` column) are in every scope, whatever the tags.
 Priorities and subsections set how deep and which sections the scope covers. They limit the tag
-matches and the questions offered to topic matching alike.
+matches, the baseline questions and the questions offered to topic matching alike.
 """
 
 from collections import Counter
@@ -82,12 +83,19 @@ def in_range(session: Session, tags: Tags) -> list[Question]:
     return list(session.scalars(select(Question).where(*depth_conditions(tags)).order_by(*ORDER)))
 
 
+def baseline_questions(session: Session, tags: Tags) -> list[Question]:
+    """The baseline questions within the chosen priorities and subsections: in every scope, whatever the tags."""
+    return list(session.scalars(select(Question).where(*depth_conditions(tags), Question.baseline.is_(True))
+                                .order_by(*ORDER)))
+
+
 def brief(q: Question) -> dict:
     """A question in short form: enough to choose it, without its options or notes."""
     tags = {name: [enum_cls(v).value for v in getattr(q, name)] for name, enum_cls in TAG_ENUMS.items()}
     return {
         "id": q.question_id,
         "question": q.text,
+        "purpose": q.purpose or None,
         "priority": q.priority,
         "subsection": SUBSECTION_LABELS[E.Subsection(q.subsection)],
         "tags": {k: v for k, v in tags.items() if v},  # a missing tag = applies to everyone

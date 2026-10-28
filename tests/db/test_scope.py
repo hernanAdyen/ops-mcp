@@ -8,12 +8,12 @@ from imcp.bank.parse import parse_bank_csv
 from imcp.config import AppSettings
 from imcp.db import enums as E
 from imcp.db.models import Generation, Merchant, Opportunity, Question
-from imcp.scope.candidates import Tags, in_range, tag_matches
+from imcp.scope.candidates import Tags, baseline_questions, brief, in_range, tag_matches
 from imcp.scope.runs import (CallPromptRequest, PlanRequest, RecordRequest, RunError, StartRequest, TrackChanges, TrackIn,
                              call_prompt_run, plan_run, record_run, start_run)
 from tests.db.conftest import session_on
 from tests.fakes import FakeModel
-from tests.test_bank_parse import make_csv, row
+from tests.test_bank_parse import HEADER_V4, make_csv, row, row4
 from tests.test_sheet_plan import FakeBook, FakeTab
 
 SETTINGS = AppSettings(
@@ -66,6 +66,46 @@ def test_priorities_and_subsections_limit_everything(session):
                 subsections=[E.Subsection.introduction, E.Subsection.features_functionality])
     assert ids(tag_matches(session, tags)) == ["ID-0001", "ID-0002", "ID-0006"]
     assert ids(in_range(session, tags)) == ["ID-0001", "ID-0002", "ID-0005", "ID-0006"]
+
+
+BASELINE_BANK = make_csv(
+    row4(qid="ID-0001", question="Project Background", enum="free_text", subsection="Introduction", priority="1",
+         channels="", pillars="", category="", baseline="Y"),
+    row4(qid="ID-0002", question="Is Tokenization in scope?", channels="ECOM, IPP", pillars="DIGITAL, PFS, UC",
+         category="PAYIN", priority="2", purpose="Decides whether tokens are stored."),
+    row4(qid="ID-0004", question="Primary driver for Capital?", channels="", pillars="PFS", category="CAPITAL",
+         priority="1", subsection="Discovery"),
+    # Baseline: in every scope, though its tags (IPP, UC) don't match a Capital scope
+    row4(qid="ID-0007", question="What is the go-live date?", enum="free_text", channels="IPP", pillars="UC",
+         category="PAYIN", priority="1", subsection="Discovery", baseline="Y"),
+    # Baseline too, but P2: left out when the IM asks for P1 only
+    row4(qid="ID-0008", question="Expected monthly volume?", enum="number", channels="IPP", pillars="UC",
+         category="PAYIN", priority="2", subsection="Discovery", baseline="Y"),
+    header=HEADER_V4,
+)
+
+
+def test_baseline_questions_are_in_every_scope_within_the_depth(session):
+    load_bank(session, parse_bank_csv(BASELINE_BANK), source_ref="bank.csv", apply=True)
+    assert ids(baseline_questions(session, CAPITAL)) == ["ID-0001", "ID-0007", "ID-0008"]
+    assert ids(baseline_questions(session, Tags(pillars=[E.Pillar.PFS], priorities=[1]))) == ["ID-0001", "ID-0007"]
+    assert brief(session.get(Question, "ID-0002"))["purpose"] == "Decides whether tokens are stored."
+
+    model = FakeModel({"additions": []})
+    out = start_run(session, SETTINGS, model, StartRequest(tags=CAPITAL, context="notes"))
+    [track] = out["tracks"]
+    assert track["tag_matches"]["count"] == 2  # ID-0001 (no tags) and ID-0004
+    assert track["baseline"] == {"count": 2, "by_subsection": {"Discovery": 2}, "by_priority": {"P1": 1, "P2": 1}}
+    assert out["total_questions"] == 4
+    already, others = model.calls[0][1]["content"].split("Other questions, the only ones you may add")
+    assert "ID-0007 |" in already and "ID-0008 |" in already and "ID-0007 |" not in others  # shown as covered
+    assert "purpose: Decides whether tokens are stored." in others
+
+    column = ["id", "ID-0001", "ID-0002", "ID-0004", "ID-0007", "ID-0008"]
+    plan = plan_run(session, out["draft_id"], PlanRequest(tab_sheet_id=7, column_count=12, id_column=column))
+    tab = FakeTab(column, width=12, tab=7).apply(plan["requests"])
+    kept = {qid: found for qid, found in zip(tab.column(0), tab.column(12)) if qid.startswith("ID-")}
+    assert kept == {"ID-0001": "tags", "ID-0004": "tags", "ID-0007": "baseline", "ID-0008": "baseline"}
 
 
 def test_deactivated_questions_are_never_offered(session):

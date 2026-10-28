@@ -107,10 +107,22 @@ saved, `/ops-create-scope` and `/ops-answer-scope` appear as commands.
 1. Open the master question bank and download the **Project Scope** tab as CSV
    (File → Download → Comma-separated values).
 2. Save it in the repo's `data/` folder (git-ignored).
-3. Ask Claude to load the question bank. It shows a dry run first (new, changed, deactivated, invalid
-   questions) and loads it only after you confirm.
+3. Ask Claude to load the question bank. It shows a dry run first (new, changed, deactivated, retired,
+   invalid questions) and loads it only after you confirm.
 
 Do this again whenever the master changes.
+
+Optional columns in the master, found by their header: `purpose` (one line on what the answer
+accomplishes; our model sees it when it looks for answers), `baseline` (Y: the question is in every
+scope, whatever the tags) and `status` (`retired` deactivates the question and keeps its row; clear
+it to bring the question back). To get a first draft of `purpose` and `baseline` from our model for
+every loaded question, run from the repo:
+
+```bash
+mkdir -p data/drafts && docker compose exec -T app python -m imcp.bank.draft > data/drafts/bank-columns.csv
+```
+
+Review the CSV, paste the two columns into the master by ID, and load the bank again.
 
 ## Using it
 

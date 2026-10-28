@@ -99,11 +99,12 @@ class Extraction:
 
 
 def question_lines(questions: list[Question]) -> str:
-    """One line per question: id | type | question | options."""
+    """One line per question: id | type | question | options | purpose (when the bank has one)."""
     lines = []
     for q in questions:
         options = f" | options: {'; '.join(q.options)}" if q.options else ""
-        lines.append(f"{q.question_id} | {E.QuestionType(q.type).value} | {one_line(q.text, 400)}{options}")
+        purpose = f" | purpose: {one_line(q.purpose, 300)}" if q.purpose else ""
+        lines.append(f"{q.question_id} | {E.QuestionType(q.type).value} | {one_line(q.text, 400)}{options}{purpose}")
     return "\n".join(lines)
 
 
@@ -224,9 +225,10 @@ def extract_answers(model: ChatModel | None, materials: list[Material], sheet_qu
                   if track else "")
     user = (
         track_line
-        + f"Questions in the IM's sheet (id | type | question | options):\n{question_lines(sheet_questions) or '(none)'}\n\n"
+        + "Questions in the IM's sheet (id | type | question | options | purpose: what the answer is for):\n"
+        f"{question_lines(sheet_questions) or '(none)'}\n\n"
         "Other bank questions. Answer these only if the material answers them directly "
-        f"(id | type | question | options):\n{question_lines(other_questions) or '(none)'}\n\n"
+        f"(id | type | question | options | purpose):\n{question_lines(other_questions) or '(none)'}\n\n"
         "New questions already in the sheet (don't list these again):\n"
         + ("\n".join(f"- {one_line(t, MAX_QUESTION)}" for t in existing_new) or "(none)")
         + f"\n\nMaterial:\n{material_text}"

@@ -21,19 +21,37 @@ MVP for Tuesday 2026-10-27 (end of day): the CheckoutProposal commands `/ops-cre
 | 4+ | Smaller `/ops-create-scope` batch | No sort when the master is in order (the master is now sorted by subsection, priority, ID) |
 | 5 | Project tracks | A scope has one or more tracks, named by the IM at the start of `/ops-create-scope`, each with its own tags and its own tab (title = track name); the Introduction and Suggested additions in the first tab only; `/ops-answer-scope` runs per tab; tracks kept on the opportunity (migration 0004); `im_scope_start` is a job (`im_scope_wait`) |
 | 7 | `/ops-create-solution` | Answers picked per track (own wins, suggested flagged, rejected skipped); research brief from the graph; the IM's model drafts; the server checks the draft and the copy's outline and returns one Docs batch (tokens, Discovery, Features table, diagram, links, a second track block removed); record points a `source` at the document. 892 doc pages loaded; diagram loader built (`im_graph_load_diagrams`). Run end to end on the Northwind test sheet 2026-10-27: 60 requests, no tokens left. Several tracks (one block each, built from the `{{Track}}` template) run twice on the Domino's test sheet (US + FR) the same day: 230 requests, clean document. End-to-end pass on a fresh two-track sheet (Slice Street Pizza, US online + FR in-store) 2026-10-27: scope, answers, proposal (201 requests), each track's Discovery table carries its own answers only |
+| 8 | Bank columns `purpose`, `baseline`, `status` (2026-10-27) | From the comparison with the coworker's Solution_Proposal_MCP: `purpose` goes into the extraction and topic-matching prompts; `baseline` questions join every scope within the IM's priorities and sections (`found_by` "baseline"); `status` `retired` deactivates a row in place. Migration 0006. `python -m imcp.bank.draft` drafts the two columns with our model into a CSV for the owner; the master stays theirs. Tags from their 66-entry dictionary and the alias pre-pass were left out on purpose (the model's topic matching covers it; revisit if an eval shows keyword misses) |
 | 6 | Embeddings and the doc page loader | `EmbeddingClient` (OpenAI-compatible `/embeddings`, called by the server with its own key; `EMBEDDING_BASE_URL`/`EMBEDDING_API_KEY` fall back to the chat model's); `node.embedding` takes any size (migration 0005), each node records its model, no normalising, cosine distance, exact search; `im_graph_load_docs` reads the Adyen docs index (`DOCS_INDEX_URL`, `llms.txt`) and the rules file `data/graph/adyen-doc-pages.csv` (about 950 of 1,300 non-payment-method pages) and loads one asset node per page: link, title, one-line description, tags, embedding, never the content; dry run then apply, deprecate not delete, `ingestion_run` recorded; `nearest_assets` search. Not yet run against the live index with a real embedding model |
 
 ## Next
 
-1. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
+Agreed with the coworker's implementation in view (2026-10-27): one question bank, on our IDs; the
+Docker setup stays until the backend is hosted; Gong material is fine (cleared) but behind a flag; the
+scope lives across meetings; the diagram registry is decided later. In order:
+
+1. **Scope over meetings** (`/ops-answer-scope`): a date per piece of material (asked only when the
+   material or its label doesn't say), `source` as "Call summary, 2026-10-24", `confirmed` and
+   `conflict` statuses, an append-only Scope log tab planned by the server, and a refusal with a clear
+   message when the same text (its hash is in the trace) is passed again. Superseding stays in the sheet.
+2. **Transcript flag:** a setting, on by default, that refuses material of kind `transcript` when off.
+3. **PII scrub**, one module with three callers: the answers result on its way back to the chat
+   (answers, evidence, ai_note, new-question text), the graph's asset loader (`assets.py`, before any
+   page is chunked, embedded or stored; names need the model, later, when reference proposals are
+   ingested) and the skill steering anything from Gong to the `inputs/` file route, which is the only
+   route that bypasses the chat model.
+
+Then, as before:
+
+4. **Real diagrams:** the owner's curated folder, then the CSV (PNG, JPEG or GIF only: Docs can't insert
    SVG). Loader built and run with one stand-in.
-2. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
+5. **Ingest the reference proposals into the graph** (the owner brings them), so designs,
    considerations and their edges come from real proposals and the tool improves as more are added.
-3. **Evals:** a second extraction case for the two prose misses (token migration, loyalty) and for the
+6. **Evals:** a second extraction case for the two prose misses (token migration, loyalty) and for the
    spurious NEW- question seen on the end-to-end pass (below); leave-one-out on the reference proposals.
-4. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
+7. **Documentation link titles:** a page the graph doesn't know is listed by its bare URL (seen with
    the reconciliation page). Load the missing docs sections or let the server fetch a title.
-5. **Master fixes, by the owner:** the 2.2.1 Discovery table header still reads "Question | In Scope"
+8. **Master fixes, by the owner:** the 2.2.1 Discovery table header still reads "Question | In Scope"
    (the plan requires "Answer"), and the empty paragraph before the "3.0 Solution" title table still
    carries direct formatting (15 pt, grey), which a further track's Discovery table inherits. Both were
    patched by hand in the copy on every run so far.
@@ -218,6 +236,11 @@ their bank questions (token migration ID-0057 on US, loyalty ID-0072 on FR).
   that would deactivate more than about 20% of the bank.
 - **Privacy sign-off** on what a queued question keeps, before turning the queue on for everyone.
 - **Later features:** CheckoutLab, IM Researcher, CheckoutPost, `/create-adyen-diagrams`.
+- **From the coworker's Solution_Proposal_MCP, left out for now** (comparison 2026-10-27): the
+  66-entry tag dictionary with aliases and a deterministic alias pre-pass in scope start; an Initial
+  Call agenda tab with follow-up probes; `[Draft]`/`[Completed]` naming, a deviations note and update
+  runs that keep the engineer's edits; a write plan shown before every write (our server already plans
+  every write exactly). A local project folder, BM25 ranking and the fresh-sheet build are not wanted.
 
 ## Working on more than one machine
 

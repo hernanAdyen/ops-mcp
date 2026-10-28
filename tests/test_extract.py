@@ -5,9 +5,9 @@ from imcp.scope.extract import MAX_NEW, MAX_OTHER_BANK, Material, extract_answer
 from tests.fakes import FakeModel
 
 
-def q(qid, text, kind="free_text", options=(), subsection="discovery", priority=1):
+def q(qid, text, kind="free_text", options=(), subsection="discovery", priority=1, purpose=None):
     return Question(question_id=qid, text=text, type=E.QuestionType(kind), options=list(options),
-                    subsection=E.Subsection(subsection), priority=priority)
+                    subsection=E.Subsection(subsection), priority=priority, purpose=purpose)
 
 
 SHEET = [
@@ -135,6 +135,12 @@ def test_the_summary_keeps_counts_only():
 
 def test_question_lines():
     assert question_lines([SHEET[1]]) == "ID-0037 | toggle | Tipping"
+
+
+def test_question_lines_carry_the_purpose_when_the_bank_has_one():
+    tipping = q("ID-0037", "Tipping", "toggle", purpose="Decides whether  the terminals\nneed a tipping flow.")
+    assert question_lines([tipping]) == "ID-0037 | toggle | Tipping | purpose: Decides whether the terminals need a tipping flow."
+    assert "purpose: what the answer is for" in run({"answers": []}, sheet_questions=[tipping])[1].calls[0][1]["content"]
 
 
 def test_extraction_asks_for_a_long_timeout():

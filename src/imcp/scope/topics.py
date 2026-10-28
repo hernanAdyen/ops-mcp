@@ -80,12 +80,14 @@ def _clean(value, limit: int, scrub: str | None) -> str:
 
 
 def question_lines(questions: list[dict]) -> str:
-    """One line per question: id | priority | subsection | question | tags."""
+    """One line per question: id | priority | subsection | question | tags, plus its purpose when the bank has one."""
     lines = []
     for q in questions:
         tags = " · ".join(", ".join(v) for v in q["tags"].values()) or "no tags"
         text = " ".join(q["question"].split())
-        lines.append(f'{q["id"]} | P{q["priority"]} | {q["subsection"]} | {text} | {tags}')
+        purpose = " ".join(q["purpose"].split()) if q.get("purpose") else ""
+        lines.append(f'{q["id"]} | P{q["priority"]} | {q["subsection"]} | {text} | {tags}'
+                     + (f" | purpose: {purpose}" if purpose else ""))
     return "\n".join(lines)
 
 

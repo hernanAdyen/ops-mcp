@@ -90,6 +90,9 @@ class Question(Base):
     # Allowed answers for choice questions, in display order ("A | B | C" in the sheet)
     options: Mapped[list[str]] = mapped_column(ARRAY(sa.Text), server_default=EMPTY_ARRAY, nullable=False)
     notes: Mapped[str | None] = mapped_column(sa.Text)  # guidance for the IM, not part of the question
+    purpose: Mapped[str | None] = mapped_column(sa.Text)  # what the answer accomplishes, one line
+    # In every scope whatever the tags (within the IM's priorities and subsections)
+    baseline: Mapped[bool] = mapped_column(sa.Boolean, server_default=sa.false(), nullable=False)
     priority: Mapped[int] = mapped_column(sa.SmallInteger, nullable=False)
     subsection: Mapped[E.Subsection] = mapped_column(pg_enum(E.Subsection, "subsection"), nullable=False)
     channels: Mapped[list[E.Channel]] = mapped_column(enum_array(E.Channel, "channel"), server_default=EMPTY_ARRAY, nullable=False)

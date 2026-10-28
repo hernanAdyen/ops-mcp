@@ -3,6 +3,10 @@
 Columns are found by their header, so their order doesn't matter, and other columns
 (`answer`, `found_by`, ...) are ignored. Every problem in a row is reported, not only the first.
 Nothing here touches the database.
+
+Optional columns: `notes` (guidance for the IM), `purpose` (what the answer accomplishes, one line),
+`baseline` (Y: in every scope, whatever the tags) and `status` (`retired` deactivates the question
+without deleting its row; empty or `active` means active).
 """
 
 import csv
@@ -25,6 +29,9 @@ HEADERS = {
     "options": "options",
     "question": "question",
     "notes": "notes",
+    "purpose": "purpose", "what it accomplishes": "purpose",
+    "baseline": "baseline",
+    "status": "status",
     "priority": "priority",
     "subsection": "subsection",
     "channels": "channels", "channel": "channels",
@@ -32,7 +39,7 @@ HEADERS = {
     "category": "categories", "categories": "categories",
     "platform": "platforms", "platforms": "platforms",
 }
-FIELDS = ("id", "type", "options", "question", "notes", "priority", "subsection",
+FIELDS = ("id", "type", "options", "question", "notes", "purpose", "baseline", "status", "priority", "subsection",
           "channels", "pillars", "categories", "platforms")
 REQUIRED = {"id": "id", "type": "enum", "question": "question", "priority": "priority", "subsection": "subsection"}
 
@@ -46,6 +53,10 @@ SUBSECTIONS: dict[str, E.Subsection] = {
     "documentation": E.Subsection.documentation,
     **{s.value: s for s in E.Subsection},  # "features_functionality" works too
 }
+YES, NO = {"y", "yes", "true", "1", "x"}, {"", "n", "no", "false", "0"}
+RETIRED, ACTIVE_WORDS = {"retired", "deprecated", "deactivated", "inactive"}, {"", "active"}
+MAX_PURPOSE = 300
+
 TAGS: dict[str, tuple[type[Enum], str]] = {
     "channels": (E.Channel, "channel"),
     "pillars": (E.Pillar, "pillar"),
@@ -64,6 +75,9 @@ class BankRow:
     type: E.QuestionType
     options: list[str]
     notes: str | None
+    purpose: str | None
+    baseline: bool
+    retired: bool  # the sheet's status column says the question is retired: deactivate, don't load
     priority: int
     subsection: E.Subsection
     channels: list[E.Channel]
@@ -78,6 +92,8 @@ class BankRow:
             "type": self.type.value,
             "options": list(self.options),
             "notes": self.notes,
+            "purpose": self.purpose,
+            "baseline": self.baseline,
             "priority": self.priority,
             "subsection": self.subsection.value,
             "channels": [v.value for v in self.channels],
@@ -174,6 +190,29 @@ def _row(v: dict[str, str]) -> tuple[dict, list[str]]:
         problems.append("missing question text")
     out["text"] = v["question"]
     out["notes"] = v["notes"] or None
+
+    purpose = " ".join(v["purpose"].split())
+    if len(purpose) > MAX_PURPOSE:
+        problems.append(f"purpose is {len(purpose)} characters; keep it to one line of at most {MAX_PURPOSE}")
+    out["purpose"] = purpose or None
+
+    baseline = v["baseline"].lower()
+    if baseline in YES:
+        out["baseline"] = True
+    elif baseline in NO:
+        out["baseline"] = False
+    else:
+        problems.append(f"baseline '{v['baseline']}' should be Y or N (or empty)")
+        out["baseline"] = False
+
+    status = v["status"].lower()
+    if status in RETIRED:
+        out["retired"] = True
+    elif status in ACTIVE_WORDS:
+        out["retired"] = False
+    else:
+        problems.append(f"status '{v['status']}' should be empty, active or retired")
+        out["retired"] = False
 
     if v["priority"] in ("1", "2", "3"):
         out["priority"] = int(v["priority"])

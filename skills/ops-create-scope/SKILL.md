@@ -59,7 +59,8 @@ with that `job_id`, again if it is still pending, until you get the result. Neve
 twice for the same scope.
 
 It returns a `draft_id`, `master_sheet_url`, the IM's `proposals_folder_url` if their MCP has one
-configured, and per track (`tracks`): counts of the tag matches, the
+configured, and per track (`tracks`): counts of the tag matches, of the baseline questions (in every
+scope whatever the tags, within the priorities and sections asked for), the
 questions our model added by topic (each with a reason) and topics no bank question covers. The
 `gap_questions` (IDs like NEW-0001) are drafted for topics no bank question covers; they go under
 **Suggested additions** at the end of the first tab. If it returns an error, tell the IM in one line
@@ -69,7 +70,7 @@ and stop.
 
 The tag matches need no review here. Show the IM, briefly, per track:
 
-- the number of tag matches, by subsection;
+- the number of tag matches, by subsection, and the number of baseline questions (`baseline`);
 - each question added by topic: ID, question and the reason;
 - one line if topic matching was skipped (no context) or unavailable.
 
@@ -122,7 +123,8 @@ Keep it short:
 
 - the sheet, as a link on its name;
 - the tabs: one per track, named after it (with one track, just Project Scope);
-- per track, the number of questions, by section, and how they were found (tags, topic, added by you);
+- per track, the number of questions, by section, and how they were found (tags, baseline, topic,
+  added by you);
   each tab is grouped by section, each with a collapsible group;
 - if the plan's `filter` is `kept`: the tabs open with the master's filter on (e.g. P1 only), and
   the IM can show the other rows from the filter on that column;

@@ -9,6 +9,8 @@ Rules (agreed 2026-10-24):
   unchanged                   last_seen_at updated
   deactivated ID is back      reactivated
   ID missing from the sheet   deactivated (IDs are permanent and never reused)
+  status 'retired' in the sheet  deactivated too, with its row kept in the sheet (a new ID marked retired
+                              isn't loaded); clear the status to bring it back
   invalid row                 skipped and reported; an ID that's already loaded keeps its last good version
 """
 
@@ -21,7 +23,7 @@ from imcp.bank.parse import BankRow, ParseResult
 from imcp.db import enums as E
 from imcp.db.models import BankLoadRun, Question, QuestionHistory
 
-CONTENT_FIELDS = ("text", "type", "options", "notes", "priority", "subsection",
+CONTENT_FIELDS = ("text", "type", "options", "notes", "purpose", "baseline", "priority", "subsection",
                   "channels", "pillars", "categories", "platforms")
 ACTIVE, DEACTIVATED = E.QuestionStatus.active, E.QuestionStatus.deactivated
 
@@ -36,7 +38,8 @@ class LoadReport:
     new: list[str] = field(default_factory=list)
     changed: list[dict] = field(default_factory=list)  # {"id": ..., "fields": [...]}
     reactivated: list[str] = field(default_factory=list)
-    deactivated: list[str] = field(default_factory=list)
+    deactivated: list[str] = field(default_factory=list)  # this load, from missing or retired rows
+    retired: list[str] = field(default_factory=list)  # rows the sheet marks retired (loaded earlier or not)
     invalid: list[dict] = field(default_factory=list)  # {"row", "id", "problems", "kept_previous_version"}
     ignored_columns: list[str] = field(default_factory=list)
 
@@ -51,6 +54,8 @@ def stored_content(q: Question) -> dict:
         "type": E.QuestionType(q.type).value,
         "options": list(q.options or []),
         "notes": q.notes,
+        "purpose": q.purpose,
+        "baseline": bool(q.baseline),
         "priority": q.priority,
         "subsection": E.Subsection(q.subsection).value,
         "channels": [E.Channel(v).value for v in q.channels],
@@ -66,6 +71,7 @@ def _snapshot(q: Question) -> dict:
 
 def _set_content(q: Question, r: BankRow) -> None:
     q.text, q.type, q.options, q.notes = r.text, r.type, list(r.options), r.notes
+    q.purpose, q.baseline = r.purpose, r.baseline
     q.priority, q.subsection = r.priority, r.subsection
     q.channels, q.pillars, q.categories, q.platforms = r.channels, r.pillars, r.categories, r.platforms
     q.content_hash = r.content_hash()
@@ -78,12 +84,15 @@ def load_bank(session: Session, parsed: ParseResult, *, source_ref: str | None, 
         return report
 
     existing = {q.question_id: q for q in session.scalars(select(Question))}
-    in_sheet = {r.question_id for r in parsed.rows} | {p.question_id for p in parsed.invalid if p.question_id}
+    rows = [r for r in parsed.rows if not r.retired]
+    report.retired = sorted(r.question_id for r in parsed.rows if r.retired)
+    # A retired row counts as missing: deactivated if it's active, and never inserted.
+    in_sheet = {r.question_id for r in rows} | {p.question_id for p in parsed.invalid if p.question_id}
 
     to_insert: list[BankRow] = []
     to_update: list[tuple[Question, BankRow]] = []
     to_touch: list[Question] = []  # same content
-    for r in parsed.rows:
+    for r in rows:
         q = existing.get(r.question_id)
         if q is None:
             to_insert.append(r)
@@ -116,6 +125,8 @@ def load_bank(session: Session, parsed: ParseResult, *, source_ref: str | None, 
         "unchanged": sum(1 for q in to_touch if q.status == ACTIVE),
         "reactivated": len(report.reactivated),
         "deactivated": len(report.deactivated),
+        "retired": len(report.retired),
+        "baseline": sum(1 for r in rows if r.baseline),
         "active_after": still_active + len(report.new) + len(report.reactivated),
     }
     if not apply:
