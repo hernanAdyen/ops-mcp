@@ -100,6 +100,20 @@ names; `/ops-answer-scope` still finds earlier runs recorded under the old one.
   show up among its open priority-1 questions. A tag or channel on those bank questions would keep
   them out.
 
+### Learned on the live check of the scope over meetings (2026-10-27, Slice Street test sheet, US tab)
+
+- A second, dated call summary on the US tab: 6 answers filled with `source` "Follow-up call summary,
+  2026-10-27", 2 rows marked `conflict`, the Scope log tab added with sheetId 1002 (1001 was already the
+  FR tab) and 8 lines appended; the same material again was refused with the date of the first use.
+  `addSheet` + `appendCells` behave on the real API as on `FakeBook`.
+- **A false conflict:** the model wrote "USD only" where the sheet says "USD", so the row became a
+  conflict. `same_answer` compares words, and the model never sees the sheet's current answer. The fix
+  to measure with the next eval case: show the model the current answer of each answered question and
+  have it return `same` when the material agrees, so a conflict means a real difference. A looser text
+  match is the wrong fix: "USD" against "USD and EUR" must stay a conflict.
+- `feedback_url` in the record result is whatever `FEEDBACK_FORM_URL` holds; on this machine it points
+  at the question bank sheet, so the form link in `.env` wants checking.
+
 ## /ops-create-solution design (agreed so far, 2026-10-26)
 
 Writes the solution proposal for one merchant from their scope sheet. Same shape as the other
