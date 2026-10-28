@@ -59,7 +59,7 @@ Answer from the material only:
 - Some sheet questions already have a current answer, shown on their line. If the material agrees with it, repeats
   it, or repeats part of it without adding or changing anything (the same meaning, whatever the wording), answer
   with the single word same. Only when the material says something different, or adds something, give the new
-  answer in full. If the material doesn't mention it, leave the question out.
+  answer, in the question's format like any other. If the material doesn't mention it, leave the question out.
 - Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
   options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
   your own words, at most 25 words.
