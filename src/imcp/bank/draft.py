@@ -155,10 +155,10 @@ def active_questions(session: Session) -> list[Question]:
 def main(argv: list[str] | None = None) -> int:
     """Print the draft CSV to stdout; the summary goes to stderr."""
     from imcp.app.db import create_db_engine
-    from imcp.config import AppSettings
+    from imcp.config import from_env_file
     from imcp.llm import ModelClient
 
-    settings = AppSettings()
+    settings = from_env_file()
     model = ModelClient.from_settings(settings)
     if model is None:
         print("Our model isn't configured (MODEL_BASE_URL, MODEL_NAME).", file=sys.stderr)

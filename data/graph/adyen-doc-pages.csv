@@ -1,0 +1,71 @@
+prefix,include,max_depth,channels,pillars,categories,platforms,note
+/,no,,,,,,Default: a page is only ingested when a rule below includes it. Longest matching prefix wins. max_depth counts path parts below the prefix (blank = all).
+/online-payments,yes,,ECOM,DIGITAL;UC,PAYIN,PSP,Online payments: integration flows and features (3DS tokenization capture refunds payouts partial payments surcharge)
+/online-payments/3d-secure/redirect-3ds2,yes,0,ECOM,DIGITAL;UC,PAYIN,PSP,Keep the overview; skip the per-platform (web/android/ios) leaves
+/online-payments/classic-integrations,no,,,,,,Legacy Classic API
+/online-payments/upgrade-your-integration,no,,,,,,Version upgrade guides
+/online-payments/release-notes,no,,,,,,
+/online-payments/create-har-file,no,,,,,,Support how-to
+/standard,yes,,ECOM,DIGITAL;UC,PAYIN,PSP,Standard integration (hosted checkout and Drop-in)
+/payment-methods,yes,0,ECOM;IPP,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,Index page only for now. The per-method pages (hundreds) are a separate decision
+/point-of-sale,yes,,IPP,UC;PFS,PAYIN,PSP;BALANCE,In-person payments: architecture terminals Terminal API features
+/point-of-sale/user-manuals,no,,,,,,Per-terminal manuals
+/point-of-sale/firmware-release-notes,no,,,,,,
+/point-of-sale/release-updating,no,,,,,,
+/point-of-sale/testing-pos-payments,yes,0,IPP,UC;PFS,PAYIN,PSP;BALANCE,Overview only; skip test card pages
+/point-of-sale/classic-library-deprecation,no,,,,,,
+/point-of-sale/sneak-preview,no,,,,,,
+/point-of-sale/menu-access,no,,,,,,Terminal admin menu
+/point-of-sale/mail-and-telephone-order-moto,yes,,IPP;MOTO,UC,PAYIN,PSP,
+/unified-commerce,yes,,ECOM;IPP;MOTO,UC,PAYIN,PSP,Unified commerce use cases (pay by link MOTO loyalty click and collect endless aisle)
+/unified-commerce/pay-by-link/release-notes,no,,,,,,
+/platforms,yes,,ECOM;IPP,PFS,PAYFAC;KYC;PAYOUT;CASHOUT;REPORTING_RECONCILIATION,BALANCE,Adyen for Platforms (balance platform): onboarding KYC payments splits payouts reports
+/platforms/kyc-verification-codes,yes,0,ECOM;IPP,PFS,KYC,BALANCE,Overview only; skip error code tables
+/platforms/release-notes,no,,,,,,
+/platforms/quickstart-guide,no,,,,,,Duplicates the main pages
+/platforms/test-verification-errors,no,,,,,,
+/platforms/us-tax-forms,yes,,ECOM;IPP,PFS,PAYFAC;REPORTING_RECONCILIATION,BALANCE,
+/marketplaces,yes,,ECOM;IPP,PFS,PAYFAC;KYC;PAYOUT;CASHOUT;REPORTING_RECONCILIATION,BALANCE,Marketplace model (mirrors /platforms with marketplace specifics)
+/marketplaces/kyc-verification-codes,yes,0,ECOM;IPP,PFS,KYC,BALANCE,Overview only
+/marketplaces/release-notes,no,,,,,,
+/marketplaces/test-verification-errors,no,,,,,,
+/adyen-for-platforms-model,yes,,ECOM;IPP,PFS,PAYFAC,BALANCE,Marketplace vs platform model: the first PFS design choice
+/financial-products,yes,,ECOM;IPP,PFS,CAPITAL;PAYOUT,BALANCE,Financial products overview pages
+/payouts,yes,,ECOM;IPP,PFS;DIGITAL,PAYOUT;REPORTING_RECONCILIATION,BALANCE,Payout service: transfers routes webhooks reconciliation
+/capital,yes,,ECOM;IPP,PFS,CAPITAL,BALANCE,Capital: grants offers repayment components compliance
+/capital/release-notes,no,,,,,,
+/business-accounts,no,,,,,,Not in the question bank yet
+/issuing,no,,,,,,Not in the question bank yet
+/classic-platforms,no,,,,,,Legacy platform integration
+/account,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN;PAYOUT;REPORTING_RECONCILIATION,PSP,Account structure settlement and payouts users SSO Customer Area
+/account/email-log-in,no,,,,,,
+/account/multifactor-authentication,no,,,,,,
+/about-our-customer-area,no,,,,,,
+/new-customer-area-menu,no,,,,,,
+/reporting,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,REPORTING_RECONCILIATION,PSP;BALANCE,Reports and reconciliation
+/risk-management,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,Risk rules disputes 3DS dynamic
+/risk-management/chargeback-guidelines,yes,0,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,Overview only; skip per-scheme guidelines
+/development-resources,yes,1,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,Developer basics: auth webhooks security PCI migration testing (one level deep)
+/development-resources/webhooks,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,
+/development-resources/pci-dss-compliance-guide,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,
+/development-resources/migrating-payment-data,yes,,ECOM;MOTO,DIGITAL;UC,PAYIN,PSP,Token and recurring data migration
+/development-resources/security,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,PAYIN,PSP;BALANCE,
+/development-resources/batch-processing,yes,0,ECOM;MOTO,DIGITAL,PAYIN,PSP,Overview only; skip SFTP file specs
+/development-resources/test-cards-and-credentials,no,,,,,,
+/development-resources/documentation-tools,no,,,,,,
+/development-resources/developer-dashboard,no,,,,,,
+/development-resources/currency-codes,no,,,,,,
+/development-resources/mcp-server,no,,,,,,
+/plugins,yes,1,ECOM;IPP,DIGITAL;UC,PAYIN,PSP,Plugin index and one page per plugin (Adobe Commerce Salesforce NetSuite Shopify Oracle Mirakl Cegid Dynamics)
+/plugins/release-notes,no,,,,,,
+/plugins/building-a-plugin,no,,,,,,
+/uplift,yes,,ECOM,DIGITAL,PAYIN,PSP,Authorisation optimisation
+/industries,no,,,,,,Peak season and market guides. Say if you want /industries/markets
+/errors,no,,,,,,API error pages
+/partners,no,,,,,,
+/adyen-glossary,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,,,Glossary
+/release-notes,no,,,,,,
+/payments,no,,,,,,Landing pages
+/set-up-adyen-payments,yes,,ECOM;IPP;MOTO,DIGITAL;UC;PFS,,,Account application requirements
+/llms.txt,no,,,,,,The docs index itself (the file this loader reads); never a page to ingest
+/llms-full.txt,no,,,,,,The whole documentation in one file; never a page to ingest

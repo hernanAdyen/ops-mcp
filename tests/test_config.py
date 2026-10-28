@@ -19,7 +19,7 @@ def test_requires_database_settings(monkeypatch):
 def test_password_with_special_characters_is_safe():
     s = AppSettings(DB_USER="imcp", DB_PASSWORD="p@ss:w/rd#?%", DB_NAME="imcp")
     url = s.database_url()
-    assert url.host == "postgres"
+    assert url.host == "127.0.0.1"  # the default host without Docker; docker-compose sets DB_HOST=postgres
     assert url.password == "p@ss:w/rd#?%"
     assert url.drivername == "postgresql+psycopg"
 
@@ -76,3 +76,13 @@ def test_mcp_folder_setting_is_optional():
     assert McpSettings().PROPOSALS_DRIVE_FOLDER_URL is None
     s = McpSettings(PROPOSALS_DRIVE_FOLDER_URL="https://drive.google.com/drive/folders/FOLDER")
     assert str(s.PROPOSALS_DRIVE_FOLDER_URL).endswith("/folders/FOLDER")
+
+
+def test_the_docker_env_names_work_without_docker():
+    s = AppSettings(APP_DB_PASSWORD="pw")
+    assert (s.DB_USER, s.DB_NAME, s.DB_HOST) == ("imcp", "imcp", "127.0.0.1")
+    assert s.database_url().render_as_string(hide_password=False) == "postgresql+psycopg://imcp:pw@127.0.0.1:5432/imcp"
+    s = AppSettings(APP_DB_USER="u", APP_DB_PASSWORD="pw", APP_DB_NAME="d", DB_HOST="postgres")
+    assert (s.DB_USER, s.DB_NAME, s.DB_HOST) == ("u", "d", "postgres")
+    with pytest.raises(ValidationError, match="APP_DB_PASSWORD"):
+        AppSettings()

@@ -21,12 +21,17 @@ class _Base(BaseSettings):
 class AppSettings(_Base):
     # Database: separate parts (preferred; passwords may contain any characters),
     # or a full DATABASE_URL as an override.
-    DB_HOST: str = "postgres"
+    # Docker sets DB_HOST=postgres and maps APP_DB_* to DB_*; without Docker the entry points (imcp-app, alembic,
+    # the bank draft) read the same .env with from_env_file(), so the APP_DB_* names work there too.
+    DB_HOST: str = "127.0.0.1"
     DB_PORT: int = 5432
     DB_USER: str | None = None
     DB_PASSWORD: SecretStr | None = None
     DB_NAME: str | None = None
     DATABASE_URL: SecretStr | None = None
+    APP_DB_USER: str | None = None  # the .env names docker-compose reads; used when DB_* aren't set
+    APP_DB_PASSWORD: SecretStr | None = None
+    APP_DB_NAME: str | None = None
 
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8787
@@ -61,8 +66,12 @@ class AppSettings(_Base):
 
     @model_validator(mode="after")
     def _database_configured(self) -> "AppSettings":
+        self.DB_USER = self.DB_USER or self.APP_DB_USER or ("imcp" if self.APP_DB_PASSWORD else None)
+        self.DB_PASSWORD = self.DB_PASSWORD or self.APP_DB_PASSWORD
+        self.DB_NAME = self.DB_NAME or self.APP_DB_NAME or ("imcp" if self.APP_DB_PASSWORD else None)
         if self.DATABASE_URL is None and not (self.DB_USER and self.DB_PASSWORD and self.DB_NAME):
-            raise ValueError("set DB_USER, DB_PASSWORD and DB_NAME (or DATABASE_URL)")
+            raise ValueError("set APP_DB_PASSWORD (and APP_DB_USER, APP_DB_NAME if not the defaults) in .env, "
+                             "or DB_USER, DB_PASSWORD and DB_NAME, or DATABASE_URL")
         return self
 
     def database_url(self) -> URL:
@@ -92,6 +101,12 @@ class McpSettings(_Base):
     IMCP_DATA_DIR: Path | None = None
     # Folder /ops-answer-scope may read merchant material from. Default: the repo's inputs/ (git-ignored).
     IMCP_INPUTS_DIR: Path | None = None
+
+
+def from_env_file(path: str = ".env") -> AppSettings:
+    """The app settings as a program run from the repo folder sees them: the environment first, then .env.
+    Only the no-Docker entry points use this; the app under Docker and the tests take the environment alone."""
+    return AppSettings(_env_file=path)
 
 
 def describe_config(s: AppSettings) -> dict:

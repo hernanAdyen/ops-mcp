@@ -14,7 +14,7 @@ How it's built: [docs/architecture.md](docs/architecture.md). Status and next st
 
 ## What you need
 
-- **Docker** (Docker Desktop or similar)
+- **Docker** (Docker Desktop or similar), or a local Postgres with pgvector (see "Without Docker")
 - **uv** ([install guide](https://docs.astral.sh/uv/getting-started/installation/)), which also installs Python 3.13
 - **Claude desktop**, with the Google Drive and Google Sheets connectors connected
 - **A model:** any OpenAI-compatible chat API. At Adyen, the internal model (needs the VPN). On a
@@ -52,6 +52,37 @@ docker compose up -d --build
 This starts Postgres, brings the database up to date, and starts the app server on
 `http://localhost:8787`. Check it: `curl http://localhost:8787/health` should say `"status": "ok"`.
 After pulling new code, run the same command again.
+
+### Without Docker
+
+The app server is a Python program and the database is Postgres with the pgvector extension, so
+both run on the machine itself.
+
+1. **Postgres with pgvector.** On a Mac, [Postgres.app](https://postgresapp.com) ships pgvector; with
+   Homebrew, `brew install postgresql@18 pgvector`. On Linux, your distribution's `postgresql` and
+   `postgresql-18-pgvector` packages. Start it and make sure `psql` connects as the admin user.
+2. **The app's user and databases.** The same file Docker runs on first start works with `psql`; it
+   reads the names from the environment. With the values from your `.env`:
+
+   ```bash
+   APP_DB_USER=imcp APP_DB_PASSWORD='the password from .env' APP_DB_NAME=imcp psql -v ON_ERROR_STOP=1 -d postgres -f docker/postgres/initdb/01-app-database.sql
+   ```
+
+   This creates the login, the `imcp` and `imcp_test` databases, and pgvector in both. Once only.
+3. **Settings.** The same `.env` works. `DB_HOST` defaults to `127.0.0.1`, so nothing to add unless
+   Postgres is elsewhere; the app reads `APP_DB_USER`, `APP_DB_PASSWORD` and `APP_DB_NAME` as Docker does.
+4. **Schema, then the server**, from the repo folder:
+
+   ```bash
+   uv sync
+   uv run alembic upgrade head
+   uv run imcp-app
+   ```
+
+   The server listens on `http://localhost:8787`; the same health check applies. Run
+   `uv run alembic upgrade head` again after pulling new code, and restart `imcp-app`.
+
+The draft of the bank columns (section 5) runs as `uv run python -m imcp.bank.draft` here.
 
 ## 3. Add the IM MCP to Claude desktop
 
@@ -110,7 +141,30 @@ saved, `/ops-create-scope` and `/ops-answer-scope` appear as commands.
 3. Ask Claude to load the question bank. It shows a dry run first (new, changed, deactivated, retired,
    invalid questions) and loads it only after you confirm.
 
-Do this again whenever the master changes.
+Do this again whenever the master changes. The master itself, the proposal master document and the
+diagram images live in the team's shared Drive folder; `QUESTION_BANK_URL` and `PROPOSAL_MASTER_URL`
+in `.env` point at the first two.
+
+## 6. Load the documentation graph and the diagrams
+
+The proposal's research brief and documentation links come from a graph of Adyen doc pages, and its
+flow diagram from a registry of images. Both load from files in `data/graph/`, which are in git:
+
+1. **Doc pages.** `adyen-doc-pages.csv` says which sections of docs.adyen.com go into the graph. Ask
+   Claude to load the Adyen docs into the graph: a dry run first (how many pages, by section), then
+   apply. It reads the docs index at `DOCS_INDEX_URL`, embeds a title and one-line description per
+   page, and never stores page content. About 900 pages; a few minutes.
+2. **Diagrams.** `diagrams.csv` lists the approved flow diagrams: a title, a link to the image, a
+   one-line description and the tags that say which projects it fits. Ask Claude to load the diagrams
+   the same way.
+
+**Publishing a diagram image.** Google Docs fetches the image itself from the public internet when
+the proposal is written, so the link has to be reachable without a login: a server on your laptop or
+inside the VPN won't work. The simplest home is the team's shared Drive folder: upload the PNG, JPEG or
+GIF there, set its sharing to **Anyone with the link, Viewer**, copy the share link
+(`https://drive.google.com/file/d/.../view?usp=sharing`) and paste it into the `url` column. The
+loader turns it into the direct image link Docs needs. A plain https link to a PNG, JPEG or GIF
+elsewhere works too. Diagrams are generic Adyen flows, never merchant material.
 
 Optional columns in the master, found by their header: `purpose` (one line on what the answer
 accomplishes; our model sees it when it looks for answers), `baseline` (Y: the question is in every
@@ -142,9 +196,10 @@ Review the CSV, paste the two columns into the master by ID, and load the bank a
 
 ## Development
 
-- Tests: `docker compose up -d postgres`, then `uv run pytest -q`. Tests in `tests/db/` use a separate
-  test database (`imcp_test`) and are skipped if it isn't reachable.
-- Schema changes: add an Alembic migration in `migrations/versions/`. `docker compose up` applies it.
+- Tests: `docker compose up -d postgres` (or your local Postgres), then `uv run pytest -q`. Tests in
+  `tests/db/` use a separate test database (`imcp_test`) and are skipped if it isn't reachable.
+- Schema changes: add an Alembic migration in `migrations/versions/`. `docker compose up` applies it;
+  without Docker, `uv run alembic upgrade head`.
 - Read [CLAUDE.md](CLAUDE.md) and [docs/architecture.md](docs/architecture.md) before changing code.
 
 ## Troubleshooting
@@ -154,6 +209,8 @@ Review the CSV, paste the two columns into the master by ID, and load the bank a
 | `docker compose` can't pull an image | Docker Hub is blocked at Adyen: set `PYTHON_IMAGE` and `POSTGRES_IMAGE` to the internal registry's |
 | `uv` can't download packages | Set the package index: `UV_DEFAULT_INDEX` in `.env` (Docker) and `~/.config/uv/uv.toml` (the MCP) |
 | `uv.lock` errors after switching machines | Delete `uv.lock` and run `uv sync`; it's made per machine |
-| Claude says it can't reach the app server | Is `docker compose up` running? Check `curl http://localhost:8787/health` |
+| Claude says it can't reach the app server | Is `docker compose up` (or `uv run imcp-app`) running? Check `curl http://localhost:8787/health` |
+| `imcp-app` says to set `APP_DB_PASSWORD` | Run it from the repo folder, where `.env` is |
+| A diagram doesn't appear in the proposal | Its image must be fetchable without a login: Drive sharing set to "Anyone with the link" |
 | The model check fails | Check `MODEL_BASE_URL`, `MODEL_NAME` and `MODEL_API_KEY`; the internal model needs the VPN |
 | A run says "still working" | Normal for long material: Claude asks again until it's done |

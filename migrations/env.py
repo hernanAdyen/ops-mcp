@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine, pool
 
-from imcp.config import AppSettings
+from imcp.config import from_env_file
 from imcp.db.models import Base
 
 config = context.config
@@ -17,7 +17,7 @@ target_metadata = Base.metadata
 
 def _url():
     # Tests (and other tools) can pass a URL directly; otherwise use the app's settings.
-    return config.attributes.get("url") or AppSettings().database_url()
+    return config.attributes.get("url") or from_env_file().database_url()
 
 
 def run_migrations_offline() -> None:

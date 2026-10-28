@@ -3,7 +3,9 @@ __pycache__/
 .pytest_cache/
 .env
 .env.prefilled
-data/
+# Local data: bank CSV downloads, drafts. The graph's rules and diagram files are tracked.
+data/*
+!data/graph/
 inputs/
 # Made per machine from its own package index; versions are pinned in pyproject.toml
 uv.lock

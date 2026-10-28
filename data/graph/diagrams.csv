@@ -1,0 +1,2 @@
+title,url,description,channels,pillars,categories,platforms,note
+Terminal API cloud integration,https://docs.adyen.com/media/b4c328f6a9ec9a57456faf825f9e851adc00f46c3ef27e84505bb1197685a1e9.png,In-person payments with the Terminal API over the cloud: the POS app sends the payment request to Adyen and Adyen forwards it to the terminal,IPP,UC;PFS,PAYIN,PSP;BALANCE,stand-in from the Adyen docs

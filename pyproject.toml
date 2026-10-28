@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 imcp-mcp = "imcp.mcp_server:main"
+imcp-app = "imcp.app.main:main"
 
 [build-system]
 requires = ["hatchling==1.32.3"]

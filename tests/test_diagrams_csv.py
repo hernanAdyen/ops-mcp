@@ -31,3 +31,16 @@ def test_empty_or_wrong_file():
         parse_diagrams_csv(HEADER)
     with pytest.raises(RulesError, match="missing the column"):
         parse_diagrams_csv("title,url\nA,https://x/a.png\n")
+
+
+def test_drive_share_links_become_direct_image_links():
+    from imcp.graph.diagrams import drive_image_url
+    direct = "https://drive.google.com/uc?export=view&id=1AbCdEfGhIjKlMnOpQrStUvWxYz"
+    assert drive_image_url("https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/view?usp=sharing") == direct
+    assert drive_image_url("https://drive.google.com/open?id=1AbCdEfGhIjKlMnOpQrStUvWxYz") == direct
+    assert drive_image_url(direct) == direct and drive_image_url("https://img.example.com/a.png") is None
+    assert drive_image_url("https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz") is None
+    pages = parse_diagrams_csv(HEADER + "Token flow,https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/view?usp=sharing,Tokens,,,,,\n")
+    assert pages[0].url == direct
+    with pytest.raises(RulesError, match="file link"):
+        parse_diagrams_csv(HEADER + "A,https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz,desc,,,,,\n")

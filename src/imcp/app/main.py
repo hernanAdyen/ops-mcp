@@ -1,4 +1,4 @@
-"""App server. Start with: uvicorn --factory imcp.app.main:create_app"""
+"""App server. Start with `uv run imcp-app` (or: uvicorn --factory imcp.app.main:create_app)."""
 
 from collections.abc import Callable
 from typing import Any
@@ -15,7 +15,7 @@ from imcp.app.graph_api import router as graph_router
 from imcp.app.jobs import JobStore
 from imcp.app.proposal_api import router as proposal_router
 from imcp.app.scope_api import router as scope_router
-from imcp.config import AppSettings, describe_config
+from imcp.config import AppSettings, describe_config, from_env_file
 from imcp.llm import EmbeddingClient, ModelClient
 
 FROM_SETTINGS: Any = object()
@@ -66,3 +66,11 @@ def create_app(
         return JSONResponse(body, status_code=200 if database["ok"] else 503)
 
     return app
+
+
+def main() -> None:
+    """Run the app server without Docker: host and port from APP_HOST and APP_PORT (default 0.0.0.0:8787)."""
+    import uvicorn
+
+    settings = from_env_file()
+    uvicorn.run(create_app(settings), host=settings.APP_HOST, port=settings.APP_PORT)

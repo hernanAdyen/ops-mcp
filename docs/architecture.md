@@ -198,7 +198,7 @@ on. With one track the headings read "Project".
 | `src/imcp/mcp_server.py` | The MCP tools. Thin: arguments, local files, HTTP calls |
 | `src/imcp/config.py` | Settings from environment variables (`AppSettings`, `McpSettings`) |
 | `src/imcp/llm.py` | The model client (OpenAI-compatible chat completions) and the embedding client (`/embeddings`, batches of 100) |
-| `src/imcp/app/main.py` | The FastAPI app: routers, `/health`, the job store |
+| `src/imcp/app/main.py` | The FastAPI app: routers, `/health`, the job store; `imcp-app` runs it without Docker |
 | `src/imcp/app/*_api.py` | HTTP endpoints, one router per command. No logic beyond calling `scope/` |
 | `src/imcp/app/jobs.py` | Jobs for slow work, kept in memory |
 | `src/imcp/bank/` | Parsing and loading the master bank CSV (dry run, apply, history); `draft.py` asks our model for a `purpose` and `baseline` per question and prints a CSV for the owner (`python -m imcp.bank.draft` in the app container) |
@@ -206,7 +206,7 @@ on. With one track the headings read "Project".
 | `src/imcp/graph/assets.py` | Loads asset nodes (doc pages now, diagrams next): dry run or apply, embeds new and changed, deprecates what dropped out, records an `ingestion_run` |
 | `src/imcp/graph/load_docs.py` | One doc page load: fetch the index from `DOCS_INDEX_URL`, apply the rules, load. The index is never stored |
 | `src/imcp/graph/search.py` | `nearest_assets` (one text) and `nearest_assets_for` (one search per requirement, merged, each page saying which requirements found it): tags narrow (an asset with no value for a tag applies to everyone), the embedding ranks |
-| `src/imcp/graph/diagrams.py` | The owner's flow diagrams CSV (title, url, description, tags) as `flow_diagram` asset nodes |
+| `src/imcp/graph/diagrams.py` | The owner's flow diagrams CSV (title, url, description, tags) as `flow_diagram` asset nodes; a Drive share link becomes the direct image link Docs can fetch |
 | `src/imcp/app/graph_api.py` | `POST /graph/loads/docs` and `/graph/loads/diagrams` as jobs, `GET /graph/jobs/{id}` |
 | `src/imcp/proposal/answers.py` | Pure: which answers of a track go into the proposal, the Features table rows (tick, box or text) |
 | `src/imcp/proposal/brief.py` | The research brief: requirements, `nearest_assets` for doc pages and diagrams, known designs, instructions |
