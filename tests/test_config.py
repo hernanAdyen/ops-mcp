@@ -26,7 +26,7 @@ def test_password_with_special_characters_is_safe():
 
 def test_defaults():
     s = AppSettings(**DB)
-    assert s.APP_PORT == 8787
+    assert s.APP_PORT == 8787 and s.APP_HOST == "127.0.0.1"  # no login of its own: the machine only, unless Docker says
     assert s.FLAG_RECOMMENDER == "curated"
     assert s.FLAG_SANITIZE is True
     assert s.FLAG_CANDIDATE_QUEUE is False

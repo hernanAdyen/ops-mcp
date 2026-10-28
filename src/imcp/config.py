@@ -33,7 +33,9 @@ class AppSettings(_Base):
     APP_DB_PASSWORD: SecretStr | None = None
     APP_DB_NAME: str | None = None
 
-    APP_HOST: str = "0.0.0.0"
+    # The app server has no login of its own: without Docker it listens on the machine only. Docker's
+    # compose file sets 0.0.0.0 inside the container and publishes the port on 127.0.0.1.
+    APP_HOST: str = "127.0.0.1"
     APP_PORT: int = 8787
 
     # Links (point at copies while testing)

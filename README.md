@@ -65,8 +65,10 @@ both run on the machine itself.
    reads the names from the environment. With the values from your `.env`:
 
    ```bash
-   APP_DB_USER=imcp APP_DB_PASSWORD='the password from .env' APP_DB_NAME=imcp psql -v ON_ERROR_STOP=1 -d postgres -f docker/postgres/initdb/01-app-database.sql
+   set -a; . ./.env; set +a; psql -v ON_ERROR_STOP=1 -d postgres -f docker/postgres/initdb/01-app-database.sql
    ```
+
+   (`set -a` exports the `.env` values for that shell, so the password never goes on the command line.)
 
    This creates the login, the `imcp` and `imcp_test` databases, and pgvector in both. Once only.
 3. **Settings.** The same `.env` works. `DB_HOST` defaults to `127.0.0.1`, so nothing to add unless
