@@ -115,6 +115,21 @@ names; `/ops-answer-scope` still finds earlier runs recorded under the old one.
 - `feedback_url` in the record result is whatever `FEEDBACK_FORM_URL` holds; on this machine it points
   at the question bank sheet, so the form link in `.env` wants checking.
 
+### Learned on the showcase runs (2026-10-27, Harbor Coffee and CourtSide Bookings test sheets)
+
+- Three scopes, four answer tabs and two proposals in one evening with no code changes. The baseline
+  questions, the dated sources and the Scope log all showed up as designed.
+- **Spurious new questions on an in-store tab:** the Harbor Coffee In-store NL run filled 44 answers
+  correctly and then added 8 NEW- rows that reword questions it had just answered (offline processing,
+  refunds at another store, store ID in reporting, tipping, standalone terminals, tap to pay). The
+  "covered by a bank question" check only fires when the model names the closest ID, and the wording
+  check compares words. A fix to measure: before a new question is kept, compare it with the questions
+  answered in the same run by meaning (the model can be asked, in the second pass, which listed question
+  each proposed new question repeats), and drop it when one matches. Add the case to the evals.
+- `im_answers_start` results run to 70 to 90 KB for a 50-row tab, mostly the Scope log lines repeated
+  in the batch. Claude Desktop handles it; a smaller batch (one `appendCells` row per change is already
+  minimal) would need the log to carry less text, which is a design choice for later.
+
 ## /ops-create-solution design (agreed so far, 2026-10-26)
 
 Writes the solution proposal for one merchant from their scope sheet. Same shape as the other
