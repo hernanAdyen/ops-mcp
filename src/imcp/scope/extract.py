@@ -262,6 +262,8 @@ def normalize_answer(q: Question, raw) -> tuple[str | None, str | None]:
             other = _other(q.options)
             if other is not None:
                 ordered = [o for o in ordered if o != other] + [f"{other}: {', '.join(extra)}"]
+            elif ordered:  # options were named: the rest is detail for the note, not an answer value
+                problem = f"also said: {', '.join(extra)}"
             else:
                 ordered += extra
                 problem = "not all of it is one of the listed options"

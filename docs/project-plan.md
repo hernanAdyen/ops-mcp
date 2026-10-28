@@ -263,10 +263,14 @@ fixed by letting a toggle from prose be TRUE only. What is left: ID-0077 on US c
 instead of the CardOnFile option in every run (a first-pass formatting wobble that started with the
 `same` rule's line in the prompt and survived its rewording), ID-0098 once in three, FR loyalty
 (ID-0072) every run, and the follow-up's regions restatement ("US only" against "United States only for
-online track") read as a conflict every run. Next for the extraction, when it comes up again: a
-multi_choice answer that matches no option could be matched against the options by meaning in a tiny
-follow-up call, and the `same` rule could show the model the current answer again at the point of
-answering; both are measured by these two cases.
+online track") read as a conflict every run. Fixed the same evening (deterministic, no model): a choice option is found by its core words (the text
+outside its parentheses, or the letters inside them in any spacing or case, never after "no"/"not"),
+once an option is named the leftover words go to the note instead of the answer, and for free text a
+finding that repeats part of the current answer counts as agreement. The second pass is told that
+notes under no track apply. Three runs each: first case US 17, 17, 18 of 18 (the card-on-file row now
+names the option, with the leftover words appended until the note fix, which is deterministic), FR
+18, 19, 18 of 20; follow-up 16/16 three times. Left: FR loyalty (ID-0072) every run and FR offline
+processing (ID-0070) two runs in three, both prose remarks the second pass doesn't tie to the FR tab.
 
 ## Backlog
 
