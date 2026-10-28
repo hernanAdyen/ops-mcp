@@ -144,7 +144,8 @@ def test_second_pass_answers_unanswered_questions_from_prose():
     second = {"answers": [{"id": "ID-0069", "answer": "cellular", "source": "Call notes", "evidence": "vans use cellular"},
                           {"id": "ID-0096", "answer": "Manual download", "source": "Call notes"},  # not in the sheet
                           {"id": "ID-0001", "answer": "United States", "source": "Call notes"},  # already answered
-                          {"id": "ID-0037", "answer": "not decided", "source": "Call notes"}]}  # no answer
+                          {"id": "ID-0037", "answer": "not decided", "source": "Call notes"},  # no answer
+                          {"id": "ID-0037", "answer": "FALSE", "source": "Call notes", "evidence": ""}]}  # silence read as no
     result, model = run([first, second], materials=PROSE)
     assert len(model.calls) == 2
     prompt = model.calls[1][1]["content"]
@@ -153,8 +154,22 @@ def test_second_pass_answers_unanswered_questions_from_prose():
     by_id = {a["id"]: a for a in result.answers}
     assert by_id["ID-0069"]["answer"] == "Cellular" and by_id["ID-0069"]["evidence"] == "vans use cellular"
     assert by_id["ID-0001"]["answer"] == "US only" and "ID-0096" not in by_id
-    assert result.prose_pass == {"status": "ok", "answers": 1, "dropped": {"unknown_id": 2, "not_an_answer": 1}}
-    assert result.summary()["prose_pass"]["answers"] == 1
+    assert result.prose_pass == {"status": "ok", "answers": 1,
+                                 "dropped": {"unknown_id": 2, "not_an_answer": 1, "toggle_without_evidence": 1}}
+    assert "ID-0037" not in by_id and result.summary()["prose_pass"]["answers"] == 1
+
+
+def test_second_pass_toggles_need_evidence_and_confidence():
+    first = {"answers": []}
+    second = {"answers": [{"id": "ID-0037", "answer": "FALSE", "source": "Call notes", "evidence": "no tipping wanted",
+                           "confidence": "high"},
+                          {"id": "ID-0069", "answer": "Wi-Fi", "source": "Call notes", "evidence": "", "confidence": "low"}]}
+    result, _ = run([first, second], materials=PROSE)
+    by_id = {a["id"]: a for a in result.answers}
+    assert by_id["ID-0037"]["answer"] == "FALSE" and by_id["ID-0069"]["answer"] == "Wi-Fi"  # only toggles need it
+    low = {"answers": [{"id": "ID-0037", "answer": "FALSE", "source": "Call notes", "evidence": "x", "confidence": "low"}]}
+    result, _ = run([first, low], materials=PROSE)
+    assert result.answers == [] and result.prose_pass["dropped"] == {"toggle_without_evidence": 1}
 
 
 def test_second_pass_is_skipped_on_id_only_material_and_when_nothing_is_left():
