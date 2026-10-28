@@ -46,6 +46,10 @@ Answer from the material only:
 - The material may list answers by question ID (for example from a call-notes tool given our questions). Use those
   IDs, and treat 'not discussed' as no answer. Answer every listed ID that has an answer, in every section of the
   sheet (Discovery and Features & Functionality alike).
+- Remarks outside the ID list answer questions too. Read every paragraph of the material and match each remark
+  to the sheet question it answers (a remark on how expired cards are handled answers the question about expired
+  cards; a remark on the checkout being a custom UI answers the question about the checkout stack). An answer
+  found in prose counts as much as one given by ID.
 - The sheet tab you are filling is for one project track (named in the request). Material may be grouped by track
   (headings like 'Track: US'). Take answers for this tab from its own track's section and from notes that are not
   about a particular track. Ignore the sections of other tracks entirely: never put another track's facts in an
@@ -53,9 +57,10 @@ Answer from the material only:
   questions from another track's section.
 - Before writing a new question, check both lists: if a listed question covers the topic, even in other words
   (for example 'Offline Processing' covers a remark about taking payments offline), answer that question instead.
-- Some sheet questions already have a current answer, shown on their line. If the material agrees with it (the
-  same meaning, whatever the wording), answer with the single word same. If the material says something different,
-  or more, give the new answer in full. If the material doesn't mention it, leave the question out.
+- Some sheet questions already have a current answer, shown on their line. If the material agrees with it, repeats
+  it, or repeats part of it without adding or changing anything (the same meaning, whatever the wording), answer
+  with the single word same. Only when the material says something different, or adds something, give the new
+  answer in full. If the material doesn't mention it, leave the question out.
 - Use the question's format. toggle: TRUE or FALSE (TRUE means yes, or in scope). single_choice: exactly one of its
   options. multi_choice: one or more of its options, joined with " | ". number: a number. free_text: a short answer in
   your own words, at most 25 words.
