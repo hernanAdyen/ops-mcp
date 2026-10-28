@@ -230,8 +230,21 @@ answers, scoring `agrees` and `conflict` as well as fills. Baseline, before the 
 answers: 13/16 gold checks; the material restating "USD" as "USD only" and "United States" as "US only"
 came back as two false conflicts, and one prose remark (expired cards, ID-0079) was missed. Fix: the
 extraction prompt shows each answered question's current answer and the model answers `same` when the
-material agrees; the server then uses the sheet's own wording, so the merge sees an agreement. After:
-to be measured on the rebuilt server.
+material agrees; the server then uses the sheet's own wording, so the merge sees an agreement. After,
+three runs each: 13/16, 13/16, 14/16. The "USD only" conflict is gone; a shorter restatement of the
+regions answer ("US only" against "United States only for online track") is still read as a change
+in two runs of three, and the two prose remarks stay missed.
+
+Two prompt rules were tried the same day for the prose misses and the restatement, with examples: the
+follow-up case went to 16/16, 15/16, 15/16, but the first case fell from 17/18 and 19/20 to 15/18
+and 18/20, stably, because the model started copying remarks word for word instead of picking the
+question's options. Without the examples the first case came back (17, 16, 16 of 18; 18/20) and the
+follow-up lost the prose hits again. The lesson: with this model, a rule aimed at prose matching
+trades against option formatting, so the prompt keeps only the `same` rule, and the prose misses need
+a targeted step rather than another prompt line: after the ID-based extraction, a second call that
+takes the sheet's unanswered questions and the material's prose paragraphs only and asks which of
+those questions the prose answers. Proposed, not built. The FR tab's offline-processing remark
+(ID-0070) is a third instance of the same miss.
 
 ## Backlog
 
