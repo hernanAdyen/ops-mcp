@@ -141,20 +141,25 @@ Then open Claude desktop's MCP settings file (Settings → Developer → Edit Co
   "mcpServers": {
     "implementation-mcp": {
       "command": "/full/path/to/uv",
-      "args": ["--directory", "/full/path/to/implementation-mcp", "run", "imcp-mcp"]
+      "args": ["--directory", "/full/path/to/implementation-mcp", "run", "imcp-mcp"],
+      "env": {
+        "PROPOSALS_DRIVE_FOLDER_URL": "https://drive.google.com/drive/folders/<your folder id>"
+      }
     }
   }
 }
 ```
 
+`PROPOSALS_DRIVE_FOLDER_URL` is the link to your own Drive folder where the scope sheets and proposals
+go; the skills copy straight into it. Leave the `"env"` block out and they look for a
+`SolutionProposals` folder in My Drive instead, creating it if needed.
+
 Use full paths: `which uv` shows uv's. Restart Claude desktop. In a chat, ask Claude to run the IM
 MCP health check: it should reach the app server and the database.
 
-Optional settings for the MCP go in an `"env"` block next to `"args"`: `APP_SERVER_URL` (default
-`http://localhost:8787`), `IMCP_DATA_DIR` and `IMCP_INPUTS_DIR` (default the repo's `data/` and
-`inputs/`), and `PROPOSALS_DRIVE_FOLDER_URL`, the link to your own Drive folder for scope sheets and
-proposals (the skills copy straight into it; without it they look for a `SolutionProposals` folder in
-My Drive and create one if needed).
+Other optional settings for the same `"env"` block: `APP_SERVER_URL` (default
+`http://localhost:8787`), and `IMCP_DATA_DIR` and `IMCP_INPUTS_DIR` (default the repo's `data/` and
+`inputs/`).
 
 ## 4. Add the skills
 
