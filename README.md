@@ -129,9 +129,16 @@ Review the CSV, paste the two columns into the master by ID, and load the bank a
 - `/ops-create-scope Acme`: answer the question card (channels, pillars, sections, categories), add notes
   if you have them, and you get a sheet in `SolutionProposals` in your Drive, plus a prompt you can
   paste into your call-notes tool after calls.
-- `/ops-answer-scope`: share what you have from the merchant (paste notes, a call summary or that
-  prompt's output). Answers are filled into the sheet as `suggested`; your own answers are never
-  overwritten. Long transcripts: save them as a `.txt` file in `inputs/` and say so.
+- `/ops-answer-scope`, after each call: share what you have from the merchant (paste notes, an email
+  or that prompt's output; save Gong transcripts and call summaries as a `.txt` file in `inputs/` and
+  say so, so they never pass through the chat). Say which day each piece is from. Answers are filled
+  into the sheet as `suggested` with their source and date; your own answers are never overwritten:
+  one the material agrees with becomes `confirmed`, one it contradicts becomes `conflict` with the
+  finding in `ai_note`, for you to settle in the sheet. The **Scope log** tab keeps one line per change.
+  Material you already ran on a tab is skipped.
+- Flags in `.env`: `FLAG_SANITIZE` scrubs email addresses, phone numbers, IBANs, card numbers and keys
+  from what our model found (on by default); `FLAG_TRANSCRIPTS` lets `/ops-answer-scope` take call
+  transcripts (on by default; off, it asks for a summary or notes instead). `im_health` shows them.
 
 ## Development
 

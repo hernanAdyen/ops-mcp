@@ -12,8 +12,8 @@ integration and writing the solution proposal:
 
 | Command | What it does | Status |
 |---|---|---|
-| `/ops-create-scope` | Picks the scoping questions for one merchant from the master question bank (by tags, plus our model matching the IM's notes) and builds a scope sheet in the IM's Drive, one tab per project track | Built |
-| `/ops-answer-scope` | Finds the answers in whatever the IM has from the merchant (notes, a call summary, a transcript, an email) and writes them into a track's tab of the scope sheet for the IM to review | Built |
+| `/ops-create-scope` | Picks the scoping questions for one merchant from the master question bank (by tags, the bank's baseline questions, plus our model matching the IM's notes) and builds a scope sheet in the IM's Drive, one tab per project track | Built |
+| `/ops-answer-scope` | After each call: finds the answers in whatever the IM has from the merchant (notes, a call summary, a transcript, an email, each with its date) and writes them into a track's tab of the scope sheet for the IM to review. The scope builds up over meetings: an answer the material agrees with is confirmed, one it contradicts is marked as a conflict, and every change is logged in the sheet's Scope log tab | Built |
 | `/ops-create-solution` | Writes the solution proposal from the scope: the merchant's answers, a research brief from the knowledge graph, the IM's model's researched solution, a diagram and documentation links, into a copy of the proposal master | Built; run on real documents with one and two tracks |
 
 Each command is a **skill** (`skills/<name>/SKILL.md`): plain instructions Claude follows, calling our
@@ -159,8 +159,9 @@ block of sections per track.
 The one command where the IM's own model writes: the server makes no chat model call here.
 
 1. The skill reads the track tab's ID, answer, status, source and question columns and calls
-   `im_proposal_start`. The server picks the answers (the IM's own win, `suggested` ones are used but
-   flagged, `rejected` are skipped), lists the open priority-1 questions, and builds the **research
+   `im_proposal_start`. The server picks the answers (the IM's own win, `suggested` and `conflict` ones
+   are used as they stand but flagged, `rejected` are skipped), lists the open priority-1 questions, and
+   builds the **research
    brief** from the graph: the requirements, the nearest doc pages (one search per requirement, merged,
    then the whole track to fill up; each page says which requirement IDs it is for) and diagrams, narrowed
    by the track's tags from `opportunity.tracks`, the designs the graph knows, and instructions.
@@ -212,12 +213,12 @@ on. With one track the headings read "Project".
 | `src/imcp/proposal/runs.py` | `/ops-create-solution` start, plan and record |
 | `src/imcp/app/proposal_api.py` | `POST /proposal/runs`, `/proposal/runs/{id}/doc-plan`, `/proposal/runs/{id}/record` |
 | `src/imcp/db/` | Tables (`models.py`), enums and the session helpers. Migrations are in `migrations/` |
-| `src/imcp/scope/candidates.py` | The tag query |
-| `src/imcp/scope/topics.py` | Topic matching with our model |
+| `src/imcp/scope/candidates.py` | The tag query and the baseline questions (in every scope, within the IM's priorities and sections) |
+| `src/imcp/scope/topics.py` | Topic matching with our model; each question line carries the bank's `purpose` |
 | `src/imcp/scope/runs.py` | `/ops-create-scope` start, plan and record, per track |
 | `src/imcp/scope/sheet_plan.py` | The `/ops-create-scope` Sheets batch: a tab per track, deletions, order, sections, groups, filter |
-| `src/imcp/scope/extract.py` | Answer extraction with our model, and checking what it returns |
-| `src/imcp/scope/answers.py` | `/ops-answer-scope` start and record |
+| `src/imcp/scope/extract.py` | Answer extraction with our model (each question line carries its `purpose`), and checking and scrubbing what it returns |
+| `src/imcp/scope/answers.py` | `/ops-answer-scope` start and record: the transcript flag, material already used on the tab (by hash), the dated `source`, the Scope log |
 | `src/imcp/scope/answers_plan.py` | The `/ops-answer-scope` Sheets batch: the merge rules over meetings (`suggested`, `confirmed`, `conflict`) and the Scope log tab (`appendCells`, so no row arithmetic) |
 | `src/imcp/scope/additions.py` | The Suggested additions section, shared by both commands |
 | `src/imcp/scope/queue.py` | The review queue for new questions, and reading back what the IM did |
@@ -244,6 +245,13 @@ on. With one track the headings read "Project".
   `*_plan.py` if it edits a sheet), a router in `src/imcp/app/`, thin tools in `mcp_server.py`, a skill
   in `skills/<command>/SKILL.md`, and tests.
 - **A schema change** is a new Alembic migration in `migrations/versions/`, never an edit to an old one.
+- **A new bank column** is read by its header in `bank/parse.py`, stored by `bank/load.py` (add it to
+  `CONTENT_FIELDS` so a change shows in the dry run and the history), a migration, and the owner adds
+  it to the master. `bank/draft.py` is the pattern for a column our model drafts for the owner's review.
+- **A flag** is a `FLAG_*` setting in `config.py`, listed in `describe_config` so `im_health` shows it,
+  and documented in `.env.example` by the owner. Check it where the work starts, never deeper.
+- **Text our model wrote** that goes back to the chat, a sheet or the graph passes through `imcp.pii`
+  first; names have no shape, so the prompts tell the model to leave them out.
 - **Tests:** `tests/test_sheet_plan.py` has `FakeTab`, which plays a Sheets batch on a grid so plans can
   be checked without Google. `tests/fakes.py` has `FakeModel`. Tests never call the real model.
 - **Skills and docs** are written in plain English: short sentences, everyday words, no jargon the IM
